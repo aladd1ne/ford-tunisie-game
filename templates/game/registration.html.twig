@@ -1,0 +1,49 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Inscrivez-vous pour jouer — La Roue Ford{% endblock %}
+{% block body_class %}page--form{% endblock %}
+
+{% block content %}
+    <section class="auth-hero">
+        <img
+            class="auth-hero__media"
+            src="{{ asset('assets/imgs/hero.jpg') }}"
+            srcset="{{ asset('assets/imgs/hero-sm.jpg') }} 900w, {{ asset('assets/imgs/hero-md.jpg') }} 1400w, {{ asset('assets/imgs/hero.jpg') }} 2200w"
+            sizes="100vw"
+            alt=""
+            aria-hidden="true"
+        >
+        <div class="auth-hero__veil" aria-hidden="true"></div>
+
+        <div class="shell panel-wrap">
+            <div class="panel">
+                <p class="eyebrow">Étape 1 sur 2</p>
+                <h1 class="panel__title">Inscrivez-vous pour jouer</h1>
+                <p class="panel__lead">Les champs suivis d’un astérisque sont obligatoires.</p>
+
+                {{ form_start(form, { attr: { novalidate: 'novalidate', class: 'form' } }) }}
+                    {% if not form.vars.valid %}
+                        <p class="alert alert--error" role="alert">
+                            Votre inscription n’a pas pu être enregistrée. Merci de corriger les champs signalés ci-dessous.
+                        </p>
+                    {% endif %}
+
+                    {{ form_errors(form) }}
+
+                    <div class="form__grid">
+                        {{ include('game/_field.html.twig', { field: form.firstName, required: true }) }}
+                        {{ include('game/_field.html.twig', { field: form.lastName, required: true }) }}
+                        {{ include('game/_field.html.twig', { field: form.company, required: true, wide: true }) }}
+                        {{ include('game/_field.html.twig', { field: form.email, required: true, wide: true }) }}
+                        {{ include('game/_field.html.twig', { field: form.phone, required: false, wide: true }) }}
+                    </div>
+
+                    <div class="form__actions">
+                        <button type="submit" class="btn btn--primary btn--lg">Je m’inscris</button>
+                        <a class="btn btn--ghost" href="{{ path('app_home') }}">Retour</a>
+                    </div>
+                {{ form_end(form) }}
+            </div>
+        </div>
+    </section>
+{% endblock %}

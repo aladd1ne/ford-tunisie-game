@@ -1,0 +1,56 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Connexion administrateur — La Roue Ford{% endblock %}
+{% block body_class %}page--form{% endblock %}
+
+{% block content %}
+    <section class="shell panel-wrap">
+        <div class="panel">
+            <p class="eyebrow">Back-office</p>
+            <h1 class="panel__title">Connexion</h1>
+            <p class="panel__lead">Réservé aux administrateurs de La Roue Ford.</p>
+
+            {% if error %}
+                <p class="alert alert--error" role="alert">
+                    Adresse e-mail ou mot de passe incorrect.
+                </p>
+            {% endif %}
+
+            <form method="post" class="form">
+                <div class="form__grid">
+                    <div class="field field--wide">
+                        <label class="field__label" for="admin-username">Adresse e-mail</label>
+                        <input
+                            type="email"
+                            id="admin-username"
+                            name="_username"
+                            class="field__input"
+                            value="{{ last_username }}"
+                            required
+                            autofocus
+                            autocomplete="email"
+                        >
+                    </div>
+                    <div class="field field--wide">
+                        <label class="field__label" for="admin-password">Mot de passe</label>
+                        <input
+                            type="password"
+                            id="admin-password"
+                            name="_password"
+                            class="field__input"
+                            required
+                            autocomplete="current-password"
+                        >
+                    </div>
+                </div>
+
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+
+                <div class="form__actions">
+                    <button type="submit" class="btn btn--primary btn--lg">Se connecter</button>
+                    <a class="btn btn--ghost" href="{{ path('app_home') }}">Retour au site</a>
+                </div>
+            </form>
+        </div>
+    </section>
+{% endblock %}
