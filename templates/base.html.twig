@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Explorez de nouveaux territoires — Invitation</title>
+    <link rel="icon" type="image/x-icon" href="{{ asset('assets/imgs/favicon.ico') }}">
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;800&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+</head>
+<body>
+<header class="hero">
+    <video class="hero-video" autoplay muted loop playsinline>
+        <source src="{{ asset('assets/videos/3677320-uhd_3840_2160_24fps.mp4') }}" type="video/mp4" />
+        <!-- fallback message -->
+        Your browser does not support the video tag.
+    </video>
+    <div class="hero-overlay"></div>
+    <div class="wrap">
+        <div class="hero-inner">
+            <div class="hero-left">
+                <div class="eyebrow">Une première exclusive</div>
+                <h1 class="title">EXPLOREZ<br>DE NOUVEAUX<br>TERRITOIRES</h1>
+                <div class="subtitle">📍 Un lieu secret. —————</div>
+                <a class="cta-btn" href="#rsvp">INVITATION</a>
+            </div>
+        </div>
+    </div>
+</header>
+
+
+<main class="main">
+    <div class="cols">
+        <section>
+            <h2 class="lead">On vous emmène pas loin,<br>On vous emmène ailleurs<br>Explorez de nouveaux territoires.</h2>
+            <p class="paragraph">Chère/cher invité(e),<br><br>
+                Nous avons le plaisir de vous convier à un événement exclusif organisé par Alpha Ford Tunisie. Pour vivre pleinement cette expérience unique dans un lieu d'exception, merci de bien vouloir confirmer votre présence via le formulaire ci-contre.</p>
+
+            <div class="brand">
+                <!-- Replace with Ford vector logo file path -->
+                <img src="{{ asset('assets/imgs/ford-logo.png') }}" alt="Ford" />
+            </div>
+        </section>
+
+        <aside>
+            <div class="card" id="rsvp">
+                <div class="form-title">Formulaire d'inscription</div>
+                <p>Je confirme ma présence avec plaisir à cet événement exceptionnel :</p>
+                <form>
+{#                    <label class="sr-only">Nom</label>#}
+                    <input type="text" name="nom" placeholder="Nom" required />
+                    <div style="height:10px"></div>
+                    <input type="text" name="prenom" placeholder="Prénom" required />
+                    <div style="height:10px"></div>
+                    <input type="tel" name="telephone" placeholder="Téléphone" required />
+                    <div style="height:10px"></div>
+                    <input type="email" name="email" placeholder="Email" required />
+                    <div style="height:10px"></div>
+                    <input type="text" name="societe" placeholder="Société" />
+
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="accept" name="accept" />
+                        <label for="accept">J'accepte avec plaisir votre invitation.</label>
+                    </div>
+
+                    <div style="margin-top:14px">
+                        <button type="submit" class="cta-btn" style="width:100%">Je confirme ma présence</button>
+                    </div>
+
+                    <div class="small">Modalités de retour :<br>Merci de compléter ce formulaire avant le 25 août 2025. Vous recevrez les détails du lieu quelques jours avant l'événement afin de préserver la surprise.</div>
+                </form>
+            </div>
+        </aside>
+    </div>
+</main>
+</body>
+</html>
