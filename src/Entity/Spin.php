@@ -118,9 +118,4 @@ class Spin implements UuidableInterface
     {
         return $this->userAgent;
     }
-
-    public function isWinning(): bool
-    {
-        return $this->prizeType->isWinning();
-    }
 }

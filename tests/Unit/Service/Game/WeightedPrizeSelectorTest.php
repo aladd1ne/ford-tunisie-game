@@ -201,7 +201,6 @@ final class WeightedPrizeSelectorTest extends TestCase
             PrizeFactory::create('Lot principal', 1, null, true, PrizeType::MAIN),
         ]);
 
-        self::assertTrue($prize->isWinning());
         self::assertSame(PrizeType::MAIN, $prize->getType());
     }
 

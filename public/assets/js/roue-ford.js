@@ -26,7 +26,8 @@
     var errorNode = document.getElementById('roue-erreur');
     var resultNode = document.getElementById('roue-resultat');
     var confettiNode = document.getElementById('confetti-canvas');
-    var confettiFrame = null;
+    var confettiInstance = null;
+    var confettiInterval = null;
 
     if (!dataNode || !wheelNode || !buttonNode) {
         return;
@@ -351,24 +352,23 @@
 
         setText('roue-resultat-titre', result.title);
         setText('roue-resultat-detail', result.detail);
-        setText('roue-resultat-badge', result.winning ? 'Gagné' : 'Résultat');
+        setText('roue-resultat-badge', 'Gagné');
 
         var thanks = document.getElementById('roue-resultat-merci');
         if (thanks) {
-            thanks.hidden = !result.winning;
+            thanks.hidden = false;
         }
 
         var card = document.getElementById('roue-resultat-carte');
         if (card) {
-            card.classList.toggle('result__card--win', Boolean(result.winning));
+            card.classList.add('result__card--win');
         }
 
         buttonNode.textContent = 'Faire tourner la roue';
         resultNode.hidden = false;
 
-        if (result.winning) {
-            launchConfetti();
-        }
+        // Un tour joué est un tour gagné : la célébration est systématique.
+        launchConfetti();
 
         var focusable = resultNode.querySelector('button');
         if (focusable) {
@@ -378,105 +378,51 @@
 
     /* ------------------------------------------------------------------ */
 
+    /**
+     * Pluie de confettis tombant du haut de l'écran, via la librairie
+     * canvas-confetti (vendée en local, cf. assets/js/vendor).
+     */
     function launchConfetti() {
-        if (!confettiNode || prefersReducedMotion) {
+        if (!confettiNode || !window.confetti || prefersReducedMotion) {
             return;
         }
 
-        var ctx = confettiNode.getContext('2d');
-        if (!ctx) {
-            return;
-        }
-
-        var dpr = window.devicePixelRatio || 1;
-        var width = window.innerWidth;
-        var height = window.innerHeight;
-
-        confettiNode.width = width * dpr;
-        confettiNode.height = height * dpr;
-        confettiNode.style.width = width + 'px';
-        confettiNode.style.height = height + 'px';
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        var particles = [];
-        var count = Math.min(220, Math.round(width / 6));
-
-        for (var i = 0; i < count; i++) {
-            particles.push(makeConfettiParticle(width, height));
+        if (!confettiInstance) {
+            confettiInstance = window.confetti.create(confettiNode, { resize: true });
         }
 
         confettiNode.hidden = false;
 
-        if (confettiFrame) {
-            window.cancelAnimationFrame(confettiFrame);
+        if (confettiInterval) {
+            window.clearInterval(confettiInterval);
         }
 
-        var start = null;
+        var elapsed = 0;
+        var tick = 40;
 
-        function frame(timestamp) {
-            if (!start) {
-                start = timestamp;
-            }
-            var elapsed = timestamp - start;
+        confettiInterval = window.setInterval(function () {
+            elapsed += tick;
 
-            ctx.clearRect(0, 0, width, height);
-            particles.forEach(function (particle) {
-                stepConfettiParticle(particle, height);
-                drawConfettiParticle(ctx, particle);
+            confettiInstance({
+                particleCount: 4,
+                startVelocity: 0,
+                ticks: 300,
+                gravity: 0.7,
+                spread: 360,
+                scalar: 1.1,
+                origin: { x: Math.random(), y: -0.1 },
+                colors: CONFETTI_COLORS
             });
 
-            if (elapsed < CONFETTI_DURATION_MS) {
-                confettiFrame = window.requestAnimationFrame(frame);
-            } else {
-                ctx.clearRect(0, 0, width, height);
-                confettiNode.hidden = true;
-                confettiFrame = null;
+            if (elapsed >= CONFETTI_DURATION_MS) {
+                window.clearInterval(confettiInterval);
+                confettiInterval = null;
+                window.setTimeout(function () {
+                    confettiInstance.reset();
+                    confettiNode.hidden = true;
+                }, 2500);
             }
-        }
-
-        confettiFrame = window.requestAnimationFrame(frame);
-    }
-
-    function makeConfettiParticle(width, height) {
-        return {
-            x: Math.random() * width,
-            y: -20 - Math.random() * height * 0.4,
-            size: 6 + Math.random() * 7,
-            color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-            speedY: 2.2 + Math.random() * 3,
-            speedX: (Math.random() - 0.5) * 2.4,
-            rotation: Math.random() * 360,
-            spin: (Math.random() - 0.5) * 12,
-            shape: Math.random() > 0.5 ? 'rect' : 'circle'
-        };
-    }
-
-    function stepConfettiParticle(particle, height) {
-        particle.y += particle.speedY;
-        particle.x += particle.speedX;
-        particle.rotation += particle.spin;
-
-        if (particle.y > height + 20) {
-            particle.y = -20;
-            particle.x = Math.random() * window.innerWidth;
-        }
-    }
-
-    function drawConfettiParticle(ctx, particle) {
-        ctx.save();
-        ctx.translate(particle.x, particle.y);
-        ctx.rotate(particle.rotation * Math.PI / 180);
-        ctx.fillStyle = particle.color;
-
-        if (particle.shape === 'rect') {
-            ctx.fillRect(-particle.size / 2, -particle.size / 4, particle.size, particle.size / 2);
-        } else {
-            ctx.beginPath();
-            ctx.arc(0, 0, particle.size / 2, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        ctx.restore();
+        }, tick);
     }
 
     function setText(id, value) {

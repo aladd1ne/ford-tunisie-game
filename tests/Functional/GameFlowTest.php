@@ -171,7 +171,6 @@ final class GameFlowTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         self::assertSame('success', $payload['status']);
-        self::assertTrue($payload['data']['winning']);
         self::assertSame('Félicitations, Marc !', $payload['data']['title']);
         self::assertSame('Vous avez gagné : Ford Puma un week-end', $payload['data']['detail']);
         self::assertSame('Merci d’avoir participé à La Roue Ford !', $payload['data']['thanks']);
@@ -187,25 +186,18 @@ final class GameFlowTest extends WebTestCase
         self::assertNotNull($crawler->filter('#roue-bouton')->attr('disabled'), 'La roue ne doit plus être jouable.');
     }
 
-    public function testConsolationResultShowsTheOopsMessage(): void
+    public function testConsolationResultShowsTheCongratsMessageToo(): void
     {
         $this->createPrize('Porte-clés Ford', 10, null, PrizeType::CONSOLATION);
         $this->register();
 
         $payload = $this->spin($this->openWheelAndReadSpinToken());
 
-        self::assertFalse($payload['data']['winning']);
-        self::assertSame(
-            'Oops, vous n’avez pas gagné le lot principal, mais une petite surprise vous attend !',
-            $payload['data']['title'],
-        );
+        self::assertSame('Félicitations, Marc !', $payload['data']['title']);
 
         $crawler = $this->client->request('GET', '/jeu');
 
-        self::assertSelectorTextContains(
-            '#roue-resultat-titre',
-            'Oops, vous n’avez pas gagné le lot principal, mais une petite surprise vous attend !',
-        );
+        self::assertSelectorTextContains('#roue-resultat-titre', 'Félicitations, Marc !');
         self::assertSame('Nouvelle partie', trim($crawler->filter('.result__form button')->text()));
     }
 
@@ -238,7 +230,7 @@ final class GameFlowTest extends WebTestCase
         $this->client->request(
             'POST',
             '/jeu/tourner',
-            ['prizeUuid' => (string) $unreachable->getUuid(), 'prize' => 'Ford Puma un week-end', 'winning' => '1'],
+            ['prizeUuid' => (string) $unreachable->getUuid(), 'prize' => 'Ford Puma un week-end'],
             [],
             ['HTTP_X-CSRF-Token' => $token],
         );
@@ -247,7 +239,6 @@ final class GameFlowTest extends WebTestCase
 
         self::assertSame('success', $payload['status']);
         self::assertSame('Porte-clés Ford', $payload['data']['prizeName'], 'Le client ne doit pas pouvoir imposer un lot.');
-        self::assertFalse($payload['data']['winning']);
         self::assertSame(5, $this->stockOf('Ford Puma un week-end'));
     }
 

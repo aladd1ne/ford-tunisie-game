@@ -108,7 +108,7 @@ class GameController extends BaseController
     /**
      * @param Prize[] $prizes
      *
-     * @return list<array{uuid: string, name: string, color: string|null, winning: bool}>
+     * @return list<array{uuid: string, name: string, color: string|null}>
      */
     private function buildSegments(array $prizes): array
     {
@@ -116,7 +116,6 @@ class GameController extends BaseController
             'uuid' => (string) $prize->getUuid(),
             'name' => $prize->getName(),
             'color' => $prize->getColor(),
-            'winning' => $prize->isWinning(),
         ], $prizes);
     }
 }

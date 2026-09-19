@@ -218,23 +218,22 @@ final class SpinServiceTest extends DatabaseTestCase
         self::assertSame('2026-09-19 14:30:00', $spin->getSpunAt()->format('Y-m-d H:i:s'));
     }
 
-    public function testMainPrizeIsFlaggedAsWinning(): void
+    public function testMainPrizeTypeIsRecordedOnTheSpin(): void
     {
         $this->createPrize('Ford Puma un week-end', 10, 1, PrizeType::MAIN);
 
         $spin = $this->spinService()->spin($this->createParticipant());
 
-        self::assertTrue($spin->isWinning());
         self::assertSame(PrizeType::MAIN, $spin->getPrizeType());
     }
 
-    public function testConsolationPrizeIsNotFlaggedAsWinning(): void
+    public function testConsolationPrizeTypeIsRecordedOnTheSpin(): void
     {
         $this->createPrize('Mug Ford', 10, 1, PrizeType::CONSOLATION);
 
         $spin = $this->spinService()->spin($this->createParticipant());
 
-        self::assertFalse($spin->isWinning());
+        self::assertSame(PrizeType::CONSOLATION, $spin->getPrizeType());
     }
 
     public function testDecrementStockReturnsFalseOnceEmpty(): void

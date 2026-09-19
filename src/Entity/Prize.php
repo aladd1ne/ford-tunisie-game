@@ -195,9 +195,4 @@ class Prize implements UuidableInterface
     {
         return $this->active && $this->weight > 0 && !$this->isOutOfStock();
     }
-
-    public function isWinning(): bool
-    {
-        return $this->type->isWinning();
-    }
 }
