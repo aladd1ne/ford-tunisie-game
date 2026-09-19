@@ -1,0 +1,84 @@
+{% extends 'base.html.twig' %}
+
+{% set spin_token = csrf_token(constant('App\\Controller\\public\\GameController::SPIN_CSRF_TOKEN_ID')) %}
+
+{% block title %}Faites tourner La Roue Ford{% endblock %}
+{% block body_class %}page--game{% endblock %}
+
+{% block content %}
+    <section class="shell game">
+        <p class="eyebrow">Bonjour {{ participant.firstName }}</p>
+        <h1 class="game__title">Faites tourner La Roue Ford</h1>
+        <p class="game__lead">Un seul tour par inscription. Le résultat est déterminé par Ford, bonne chance !</p>
+
+        <div class="wheel-stage">
+            <div class="wheel-pointer" aria-hidden="true"></div>
+            <div class="wheel" id="roue" data-spinning="false" role="img"
+                 aria-label="Roue des lots La Roue Ford"></div>
+            <div class="wheel-hub" aria-hidden="true">
+                <img src="{{ asset('assets/imgs/ReadySetFord_White_v1.png') }}" alt="">
+            </div>
+        </div>
+
+        <div class="game__actions">
+            <button type="button" class="btn btn--primary btn--lg" id="roue-bouton"
+                    {% if result is not null %}disabled{% endif %}>
+                Faire tourner la roue
+            </button>
+            <p class="game__error" id="roue-erreur" role="alert" hidden></p>
+            <noscript>
+                <p class="alert alert--warning">
+                    Activez JavaScript pour faire tourner la roue et découvrir votre résultat.
+                </p>
+            </noscript>
+        </div>
+
+        <details class="legend">
+            <summary class="legend__summary">Les lots en jeu</summary>
+            <ul class="legend__list">
+                {% for segment in segments %}
+                    <li class="legend__item">
+                        <span class="legend__dot" style="background: {{ segment.color|default('#066FEF') }}"></span>
+                        {{ segment.name }}
+                    </li>
+                {% else %}
+                    <li class="legend__item">Aucun lot n’est disponible pour le moment.</li>
+                {% endfor %}
+            </ul>
+        </details>
+    </section>
+
+    <div class="result" id="roue-resultat" role="dialog" aria-modal="true" aria-labelledby="roue-resultat-titre"
+         {% if result is null %}hidden{% endif %}>
+        <div class="result__card {% if result is not null %}result__card--win{% endif %}" id="roue-resultat-carte">
+            <p class="result__badge" id="roue-resultat-badge">Gagné</p>
+            <h2 class="result__title" id="roue-resultat-titre">{{ result is not null ? result.title : '' }}</h2>
+            <p class="result__detail" id="roue-resultat-detail">{{ result is not null ? result.detail : '' }}</p>
+            <p class="result__thanks" id="roue-resultat-merci" {% if result is null %}hidden{% endif %}>
+                Merci d’avoir participé à La Roue Ford !
+            </p>
+
+            <form method="post" action="{{ path('app_game_restart') }}" class="result__form">
+                <input type="hidden" name="_token"
+                       value="{{ csrf_token(constant('App\\Controller\\public\\GameController::RESTART_CSRF_TOKEN_ID')) }}">
+                <button type="submit" class="btn btn--primary btn--lg">Nouvelle partie</button>
+            </form>
+        </div>
+    </div>
+
+    <canvas class="confetti-canvas" id="confetti-canvas" aria-hidden="true" hidden></canvas>
+{% endblock %}
+
+{% block javascripts %}
+    <script type="application/json" id="roue-data">
+        {{ {
+            segments: segments,
+            spinUrl: path('app_game_spin'),
+            csrfToken: spin_token,
+            alreadyPlayed: result is not null,
+            playedPrizeUuid: result is not null ? result.prizeUuid : null
+        }|json_encode|raw }}
+    </script>
+    <script src="{{ asset('assets/js/vendor/confetti.browser.min.js') }}" defer></script>
+    <script src="{{ asset('assets/js/roue-ford.js') }}" defer></script>
+{% endblock %}

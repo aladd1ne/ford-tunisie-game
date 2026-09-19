@@ -14,11 +14,11 @@ trait TimestampableEntityTrait
 {
     #[Gedmo\Timestampable(on: 'create')]
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
-    protected ?DateTimeInterface $createdAt;
+    protected ?DateTimeInterface $createdAt = null;
 
     #[Gedmo\Timestampable(on: 'update')]
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
-    protected ?DateTimeInterface $updatedAt;
+    protected ?DateTimeInterface $updatedAt = null;
 
     public function setCreatedAt(?DateTime $createdAt): static
     {

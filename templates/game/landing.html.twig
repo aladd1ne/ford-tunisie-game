@@ -1,0 +1,54 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}La Roue Ford — Tentez de gagner un cadeau{% endblock %}
+{% block body_class %}page--landing{% endblock %}
+
+{% block content %}
+    <section class="hero">
+        {# Photo de repli : visible tant que la vidéo n'a pas démarré, si elle
+           échoue, et pour les personnes qui préfèrent moins d'animations. #}
+        <img
+            class="hero__media hero__media--fallback"
+            src="{{ asset('assets/imgs/hero.jpg') }}"
+            srcset="{{ asset('assets/imgs/hero-sm.jpg') }} 900w, {{ asset('assets/imgs/hero-md.jpg') }} 1400w, {{ asset('assets/imgs/hero.jpg') }} 2200w"
+            sizes="100vw"
+            alt=""
+            aria-hidden="true"
+        >
+        <video
+            class="hero__media hero__media--video"
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="auto"
+            poster="{{ asset('assets/imgs/hero-sm.jpg') }}"
+            aria-hidden="true"
+            tabindex="-1"
+        >
+            <source src="{{ asset('assets/video/hero.mp4') }}" type="video/mp4">
+        </video>
+        <div class="hero__glow" aria-hidden="true"></div>
+        <div class="hero__decor hero__decor--1" aria-hidden="true"></div>
+        <div class="hero__decor hero__decor--2" aria-hidden="true"></div>
+        <div class="hero__veil" aria-hidden="true"></div>
+
+        <div class="shell hero__inner">
+            <p class="eyebrow">Jeu promotionnel Ford</p>
+            <h1 class="hero__title">La Roue Ford</h1>
+            <p class="hero__lead">Inscrivez-vous, faites tourner la roue et tentez de gagner un cadeau ! À vous de jouer !</p>
+
+            <div class="hero__cta">
+                <a class="btn btn--primary btn--lg" href="{{ path('app_registration') }}">Participer</a>
+            </div>
+
+            <ol class="mini-steps">
+                <li class="mini-steps__item"><span class="mini-steps__num">1</span>Inscrivez-vous</li>
+                <li class="mini-steps__sep" aria-hidden="true"></li>
+                <li class="mini-steps__item"><span class="mini-steps__num">2</span>Faites tourner la roue</li>
+                <li class="mini-steps__sep" aria-hidden="true"></li>
+                <li class="mini-steps__item"><span class="mini-steps__num">3</span>Découvrez votre cadeau</li>
+            </ol>
+        </div>
+    </section>
+{% endblock %}

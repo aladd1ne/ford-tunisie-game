@@ -17,8 +17,15 @@ services:
         resource: '../src/'
         exclude:
             - '../src/DependencyInjection/'
+            - '../src/Dto/'
             - '../src/Entity/'
+            - '../src/Enum/'
             - '../src/Kernel.php'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
+
+    # Stratégie de tirage utilisée par le jeu : pour changer d'algorithme,
+    # il suffit de pointer cet alias vers une autre implémentation.
+    App\Service\Game\PrizeSelectorInterface: '@App\Service\Game\WeightedPrizeSelector'
+    App\Service\Game\RandomNumberGeneratorInterface: '@App\Service\Game\CryptoRandomNumberGenerator'

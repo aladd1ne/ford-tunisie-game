@@ -1,10 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Controller\Admin;
 
-use App\Controller\public\EventController;
-use App\Entity\Event;
-use App\Entity\TicketType;
+use App\Entity\Participant;
+use App\Entity\Prize;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\MenuItem;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractDashboardController;
@@ -12,40 +13,41 @@ use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+/**
+ * Back-office de « La Roue Ford ».
+ *
+ * Permet de gérer les lots (nom, poids, stock, activation) et de consulter
+ * les inscriptions, sans jamais toucher à la logique de jeu (SpinService,
+ * WeightedPrizeSelector) : celle-ci lit toujours les lots directement en
+ * base.
+ */
 class DashboardController extends AbstractDashboardController
 {
+    public function __construct(
+        private readonly AdminUrlGenerator $adminUrlGenerator,
+    ) {
+    }
+
     #[Route('/admin', name: 'admin')]
     public function index(): Response
     {
-        return parent::index();
-
-        // Option 1. You can make your dashboard redirect to some common page of your backend
-        //
-//         $adminUrlGenerator = $this->container->get(AdminUrlGenerator::class);
-//         return $this->redirect($adminUrlGenerator->setController(EventCrudController::class)->generateUrl());
-
-        // Option 2. You can make your dashboard redirect to different pages depending on the user
-        //
-        // if ('jane' === $this->getUser()->getUsername()) {
-        //     return $this->redirect('...');
-        // }
-
-        // Option 3. You can render some custom template to display a proper dashboard with widgets, etc.
-        // (tip: it's easier if your template extends from @EasyAdmin/page/content.html.twig)
-        //
-        // return $this->render('some/path/my-dashboard.html.twig');
+        return $this->redirect($this->adminUrlGenerator->setController(PrizeCrudController::class)->generateUrl());
     }
 
     public function configureDashboard(): Dashboard
     {
         return Dashboard::new()
-            ->setTitle('BEKE DASHBOARD');
+            ->setTitle('La Roue Ford')
+            ->setLocales(['fr']);
     }
 
     public function configureMenuItems(): iterable
     {
-        yield MenuItem::linkToDashboard('Dashboard', 'fa fa-home');
-        yield MenuItem::linkToCrud('Event', 'fas fa-list', Event::class);
-        yield MenuItem::linkToCrud('Event Ticket Type', 'fas fa-list', TicketType::class);
+        yield MenuItem::linkToDashboard('Tableau de bord', 'fa fa-home');
+        yield MenuItem::section('Jeu');
+        yield MenuItem::linkToCrud('Lots', 'fa fa-gift', Prize::class);
+        yield MenuItem::linkToCrud('Inscriptions', 'fa fa-users', Participant::class);
+        yield MenuItem::section();
+        yield MenuItem::linkToUrl('Voir le site', 'fa fa-arrow-up-right-from-square', '/');
     }
 }

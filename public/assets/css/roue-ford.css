@@ -1,0 +1,709 @@
+/* ------------------------------------------------------------------------
+   La Roue Ford — feuille de style de l'opération promotionnelle.
+   ------------------------------------------------------------------------ */
+
+:root {
+    --ford-deep: #00095b;
+    --ford-blue: #066fef;
+    --ford-blue-dark: #0353b4;
+    --ford-blue-soft: #e7eefc;
+    --ink: #0b1220;
+    --muted: #5a6372;
+    --bg: #f4f7fc;
+    --surface: #ffffff;
+    --border: #d9e2f2;
+    --danger: #b3261e;
+    --danger-soft: #fdecea;
+    --success: #0f7a3d;
+    --success-soft: #e7f6ec;
+    --shell: 1120px;
+    --radius: 18px;
+    --shadow-sm: 0 2px 8px rgba(0, 9, 91, .08);
+    --shadow-lg: 0 24px 60px rgba(0, 9, 91, .18);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body.page {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Montserrat, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+h1, h2, h3 { line-height: 1.15; margin: 0 0 .5em; }
+
+p { margin: 0 0 1rem; }
+
+img { max-width: 100%; height: auto; }
+
+.shell {
+    width: 100%;
+    max-width: var(--shell);
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    background: var(--ford-deep);
+    color: #fff;
+    padding: 12px 18px;
+    z-index: 100;
+}
+
+.skip-link:focus { left: 0; }
+
+:where(a, button, input, summary):focus-visible {
+    outline: 3px solid var(--ford-blue);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.site-header {
+    background: var(--ford-deep);
+    color: #fff;
+}
+
+.site-header__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 72px;
+}
+
+.site-header__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.site-header__logo { width: 200px; height: auto; display: block; }
+
+.site-main { flex: 1 0 auto; }
+
+.site-footer {
+    background: var(--surface);
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    font-size: .82rem;
+    padding: 22px 0;
+    margin-top: 64px;
+}
+
+.site-footer p { margin: 0; }
+
+/* ----------------------------------------------------------------- atomes */
+
+.eyebrow {
+    text-transform: uppercase;
+    letter-spacing: .18em;
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--ford-blue);
+    margin: 0 0 .75rem;
+}
+
+.btn {
+    --btn-bg: var(--ford-blue);
+    --btn-fg: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 13px 26px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    font: inherit;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+.btn:hover:not(:disabled) { background: var(--ford-blue-dark); transform: translateY(-1px); }
+
+.btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+.btn--lg { padding: 16px 38px; font-size: 1.05rem; }
+
+.btn--ghost {
+    --btn-bg: transparent;
+    --btn-fg: var(--ford-deep);
+    border-color: var(--border);
+}
+
+.btn--ghost:hover:not(:disabled) { background: var(--ford-blue-soft); color: var(--ford-deep); }
+
+.alert {
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin: 20px 0 0;
+    font-size: .92rem;
+    border: 1px solid transparent;
+}
+
+.alert--success { background: var(--success-soft); border-color: #bfe5cc; color: var(--success); }
+.alert--warning { background: #fff6e5; border-color: #f4dcae; color: #8a5a00; }
+.alert--error { background: var(--danger-soft); border-color: #f3c6c2; color: var(--danger); }
+
+/* ------------------------------------------------------------------ héros */
+
+/* La page d'accueil tient sur un seul écran : le héros occupe tout l'espace
+   restant entre l'en-tête et le pied de page, sans section à faire défiler. */
+.page--landing { min-height: 100vh; min-height: 100dvh; }
+
+.page--landing .site-main { display: flex; }
+
+.page--landing .site-footer { margin-top: 0; }
+
+.hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: #fff;
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: clamp(24px, 6vh, 64px) 0;
+    background: var(--ford-deep);
+}
+
+.hero__media,
+.hero__veil {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.hero__media {
+    z-index: -3;
+    object-fit: cover;
+    object-position: center 38%;
+    transform: scale(1.02);
+}
+
+/* La vidéo se superpose à la photo de repli, qui reste dessous : si elle ne
+   se charge pas, si le navigateur ne la supporte pas, ou si le mouvement est
+   réduit, la photo est ce que l'utilisateur voit. */
+.hero__media--video { z-index: -2; }
+
+@media (prefers-reduced-motion: reduce) {
+    .hero__media--video { display: none; }
+}
+
+.hero__veil {
+    z-index: -1;
+    background:
+        radial-gradient(60% 85% at 15% 30%, rgba(0, 9, 91, .55) 0%, transparent 60%),
+        linear-gradient(105deg, rgba(0, 6, 46, .95) 0%, rgba(0, 9, 91, .82) 45%, rgba(3, 83, 180, .48) 100%);
+}
+
+/* Anneaux décoratifs, purement ornementaux, en écho au thème de la roue. */
+.hero__decor {
+    position: absolute;
+    z-index: 0;
+    border-radius: 50%;
+    border: 1.5px dashed rgba(255, 255, 255, .22);
+    pointer-events: none;
+}
+
+.hero__decor--1 { width: 420px; height: 420px; right: -140px; top: -80px; }
+.hero__decor--2 { width: 260px; height: 260px; right: 60px; bottom: -60px; border-color: rgba(255, 179, 1, .28); }
+
+.hero__glow {
+    position: absolute;
+    z-index: -1;
+    width: 620px;
+    height: 620px;
+    right: -220px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: radial-gradient(circle, rgba(6, 111, 239, .35), transparent 70%);
+    filter: blur(10px);
+    pointer-events: none;
+}
+
+.hero__inner { position: relative; z-index: 1; max-width: 720px; }
+
+.hero .eyebrow { color: #9ec2ff; }
+
+.hero__title {
+    font-size: clamp(2.3rem, 7vw, 4.4rem);
+    font-weight: 800;
+    letter-spacing: -.02em;
+    margin-bottom: .35em;
+}
+
+.hero__lead {
+    font-size: clamp(1rem, 2.2vw, 1.3rem);
+    color: rgba(255, 255, 255, .92);
+    margin-bottom: 1.8rem;
+    max-width: 38ch;
+}
+
+.hero__cta { position: relative; display: inline-block; }
+
+.hero__cta::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 999px;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, .55), transparent);
+    background-size: 200% 100%;
+    z-index: -1;
+    opacity: 0;
+}
+
+/* Repère des trois étapes, condensé dans le héros pour que tout tienne sur
+   un seul écran sans avoir à faire défiler la page. */
+.mini-steps {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    margin: 2.2rem 0 0;
+    padding: 0;
+}
+
+.mini-steps__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .88rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, .85);
+    white-space: nowrap;
+}
+
+.mini-steps__num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, .45);
+    font-size: .74rem;
+    font-weight: 700;
+    flex: 0 0 auto;
+}
+
+.mini-steps__sep {
+    width: 20px;
+    height: 1px;
+    background: rgba(255, 255, 255, .3);
+    flex: 0 0 auto;
+}
+
+/* Animations d'entrée : n'apparaissent que si le mouvement n'est pas réduit,
+   sinon le contenu reste directement visible dans son état final. */
+@media (prefers-reduced-motion: no-preference) {
+    .hero__media--fallback { animation: hero-zoom 22s ease-in-out infinite alternate; }
+
+    .hero__decor--1 { animation: hero-rotate 90s linear infinite; }
+    .hero__decor--2 { animation: hero-rotate 70s linear infinite reverse; }
+
+    .hero .eyebrow,
+    .hero__title,
+    .hero__lead,
+    .hero__cta,
+    .mini-steps {
+        opacity: 0;
+        animation: fade-up .8s cubic-bezier(.16, .8, .3, 1) forwards;
+    }
+
+    .hero .eyebrow { animation-delay: .05s; }
+    .hero__title { animation-delay: .18s; }
+    .hero__lead { animation-delay: .32s; }
+    .hero__cta { animation-delay: .46s; }
+    .mini-steps { animation-delay: .58s; }
+
+    .hero__cta::after {
+        animation: btn-sheen 2.6s ease-in-out .3s infinite;
+        animation-delay: 1.4s;
+    }
+}
+
+@keyframes hero-zoom {
+    from { transform: scale(1); }
+    to { transform: scale(1.12); }
+}
+
+@keyframes hero-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes fade-up {
+    from { opacity: 0; transform: translateY(22px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes btn-sheen {
+    0%, 100% { opacity: 0; background-position: 200% 0; }
+    50% { opacity: 1; background-position: -20% 0; }
+}
+
+/* ----------------------------------------------------------------- panneau */
+
+.panel-wrap { display: flex; justify-content: center; padding-top: 56px; width: 100%; }
+
+.panel {
+    width: 100%;
+    max-width: 640px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    padding: clamp(28px, 5vw, 48px);
+}
+
+/* Section d'inscription : le formulaire flotte sur la photo de la roue,
+   comme le héros de l'accueil, pour une identité visuelle cohérente. */
+.auth-hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    padding: clamp(48px, 8vh, 96px) 0;
+}
+
+.auth-hero__media {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 38%;
+}
+
+.auth-hero__veil {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(160deg, rgba(0, 6, 46, .92) 0%, rgba(0, 9, 91, .78) 55%, rgba(3, 83, 180, .5) 100%);
+}
+
+.auth-hero .panel-wrap { position: relative; z-index: 1; padding-top: 0; }
+
+.panel--center { text-align: center; }
+
+.panel__title { font-size: clamp(1.7rem, 4.5vw, 2.3rem); color: var(--ford-deep); }
+
+.panel__lead { color: var(--muted); }
+
+.panel__lead--strong { color: var(--ink); font-size: 1.05rem; margin-bottom: 2rem; }
+
+/* --------------------------------------------------------------- formulaire */
+
+.form__grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 8px;
+}
+
+.field { display: flex; flex-direction: column; }
+
+.field--wide { grid-column: 1 / -1; }
+
+.field__label {
+    font-weight: 600;
+    font-size: .9rem;
+    margin-bottom: 6px;
+    color: var(--ford-deep);
+}
+
+.field__required { color: var(--danger); font-weight: 700; }
+
+.field__input {
+    width: 100%;
+    padding: 13px 15px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    font: inherit;
+    color: var(--ink);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.field__input::placeholder { color: #9aa3b2; }
+
+.field__input:focus {
+    outline: none;
+    border-color: var(--ford-blue);
+    box-shadow: 0 0 0 3px rgba(6, 111, 239, .18);
+}
+
+.field__help { margin: 6px 0 0; font-size: .8rem; color: var(--muted); }
+
+.field__error { margin: 6px 0 0; font-size: .84rem; color: var(--danger); font-weight: 600; }
+
+.field--error .field__input { border-color: var(--danger); background: var(--danger-soft); }
+
+.form__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-top: 28px;
+}
+
+/* Erreurs globales du formulaire Symfony. */
+.form > ul { list-style: none; padding: 0; margin: 0 0 16px; color: var(--danger); font-weight: 600; }
+
+/* --------------------------------------------------------------------- jeu */
+
+.game { text-align: center; padding-top: 48px; }
+
+.game__title { font-size: clamp(1.8rem, 5vw, 2.6rem); color: var(--ford-deep); }
+
+.game__lead { color: var(--muted); max-width: 46ch; margin: 0 auto 32px; }
+
+.wheel-stage {
+    position: relative;
+    width: min(92vw, 640px);
+    aspect-ratio: 1;
+    margin: 0 auto;
+    filter: drop-shadow(0 22px 40px rgba(0, 9, 91, .22));
+}
+
+.wheel {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--surface);
+    transform: rotate(0deg);
+    will-change: transform;
+}
+
+.wheel[data-spinning="true"] {
+    transition: transform 5.2s cubic-bezier(.16, .84, .2, 1);
+}
+
+.wheel__svg { display: block; width: 100%; height: 100%; }
+
+.wheel__label {
+    font-family: Montserrat, system-ui, sans-serif;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+
+.wheel-pointer {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 16px solid transparent;
+    border-right: 16px solid transparent;
+    border-top: 30px solid var(--ford-deep);
+    z-index: 3;
+    filter: drop-shadow(0 3px 5px rgba(0, 9, 91, .35));
+}
+
+.wheel-hub {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--ford-deep);
+    display: grid;
+    place-items: center;
+    border: 5px solid #fff;
+    z-index: 2;
+    padding: 4%;
+    box-sizing: border-box;
+}
+
+.wheel-hub img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.game__actions { margin-top: 36px; }
+
+.game__error {
+    margin: 16px auto 0;
+    max-width: 46ch;
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.legend {
+    margin: 32px auto 0;
+    max-width: 560px;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 20px;
+}
+
+.legend__summary { cursor: pointer; font-weight: 600; color: var(--ford-deep); }
+
+.legend__list { list-style: none; margin: 14px 0 0; padding: 0; }
+
+.legend__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: .92rem;
+    color: var(--muted);
+}
+
+.legend__dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    border: 1px solid rgba(0, 9, 91, .18);
+}
+
+/* ---------------------------------------------------------------- résultat */
+
+.result {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(5, 12, 45, .72);
+    backdrop-filter: blur(4px);
+    animation: result-in .35s ease both;
+}
+
+.result[hidden] { display: none; }
+
+.result__card {
+    width: 100%;
+    max-width: 520px;
+    background: var(--surface);
+    border-radius: 22px;
+    padding: clamp(28px, 5vw, 44px);
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    border-top: 6px solid var(--ford-blue);
+}
+
+.result__card--win {
+    border-top-color: #f5b301;
+    animation: card-win-pop .6s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+
+@keyframes card-win-pop {
+    0% { transform: scale(.85); }
+    60% { transform: scale(1.04); }
+    100% { transform: scale(1); }
+}
+
+.confetti-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 60;
+    pointer-events: none;
+}
+
+.confetti-canvas[hidden] { display: none; }
+
+.result__badge {
+    display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    font-size: .7rem;
+    font-weight: 800;
+    color: var(--ford-blue);
+    margin: 0 0 12px;
+}
+
+.result__card--win .result__badge { color: #a97a00; }
+
+.result__title {
+    font-size: clamp(1.4rem, 4.2vw, 2rem);
+    color: var(--ford-deep);
+    margin-bottom: .5em;
+}
+
+.result__detail { font-size: 1.05rem; font-weight: 600; }
+
+.result__thanks { color: var(--muted); }
+
+.result__thanks[hidden] { display: none; }
+
+.result__form { margin-top: 18px; }
+
+@keyframes result-in {
+    from { opacity: 0; transform: scale(.97); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 640px) {
+    .form__grid { grid-template-columns: minmax(0, 1fr); }
+
+    .site-header__logo { width: 150px; }
+
+    .form__actions .btn { width: 100%; }
+}
+
+/* Écrans bas (mobile en paysage, petits ordinateurs portables) : on resserre
+   l'en-tête et le héros pour que tout continue de tenir sans défilement. */
+@media (max-height: 700px) {
+    .site-header__inner { min-height: 56px; }
+
+    .hero .eyebrow { margin-bottom: 1rem; }
+
+    .hero__title { margin-bottom: .25em; }
+
+    .hero__lead { margin-bottom: 1.2rem; }
+
+    .mini-steps { margin-top: 1.4rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wheel[data-spinning="true"] { transition: none; }
+
+    .result__card--win { animation: none; }
+
+    .result { animation: none; }
+
+    .btn { transition: none; }
+}

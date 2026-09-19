@@ -1,0 +1,14 @@
+{% set has_error = not field.vars.valid %}
+<div class="field{{ wide|default(false) ? ' field--wide' : '' }}{{ has_error ? ' field--error' : '' }}">
+    {{ form_label(field, null, { label_attr: { class: 'field__label' } }) }}
+    {% if required|default(false) %}<span class="field__required" aria-hidden="true">*</span>{% endif %}
+    {{ form_widget(field, { attr: field.vars.attr|merge({ class: 'field__input' }) }) }}
+    {% if field.vars.help is not empty %}
+        <p class="field__help">{{ field.vars.help }}</p>
+    {% endif %}
+    {% if has_error %}
+        <p class="field__error" role="alert">
+            {% for error in field.vars.errors %}{{ error.message }}{% if not loop.last %} {% endif %}{% endfor %}
+        </p>
+    {% endif %}
+</div>
