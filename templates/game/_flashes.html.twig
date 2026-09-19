@@ -1,0 +1,10 @@
+{% set flash_labels = { success: 'Succès', warning: 'Information', error: 'Erreur' } %}
+{% for type, messages in app.flashes(['success', 'warning', 'error']) %}
+    {% for message in messages %}
+        <div class="shell">
+            <p class="alert alert--{{ type }}" role="status">
+                <strong>{{ flash_labels[type] ?? '' }} :</strong> {{ message }}
+            </p>
+        </div>
+    {% endfor %}
+{% endfor %}

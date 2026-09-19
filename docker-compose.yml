@@ -9,15 +9,15 @@ services:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
 
-    #    container_name: ford-explore-php
+    #    container_name: ford-game-php
     volumes:
       - "./:/var/www/html"
     environment:
-      PHP_IDE_CONFIG: "serverName=ford-explore-server"
+      PHP_IDE_CONFIG: "serverName=ford-game-server"
 
   nginx:
     image: nginx:latest
-    #    container_name: ford-explore-nginx
+    #    container_name: ford-game-nginx
     ports:
       - "3200:80"
     volumes:
@@ -29,12 +29,12 @@ services:
 
   db:
     image: mysql:8.0
-    #    container_name: ford-explore-db
+    #    container_name: ford-game-db
     environment:
       MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: ford-explore
-      MYSQL_USER: ford-explore_user
-      MYSQL_PASSWORD: ford-explore_password
+      MYSQL_DATABASE: ford-game
+      MYSQL_USER: ford-game_user
+      MYSQL_PASSWORD: ford-game_password
     ports:
       - "3306"
     volumes:
@@ -46,8 +46,8 @@ services:
     #    container_name: peachgate-phpmyadmin
     environment:
       PMA_HOST: db
-      PMA_USER: ford-explore_user
-      PMA_PASSWORD: ford-explore_password
+      PMA_USER: ford-game_user
+      PMA_PASSWORD: ford-game_password
       PMA_PORT: 3306
     ports:
       - "80"
