@@ -6,67 +6,80 @@
 {% block body_class %}page--game{% endblock %}
 
 {% block content %}
-    <section class="shell game">
-        <p class="eyebrow">Bonjour {{ participant.firstName }}</p>
-        <h1 class="game__title">Faites tourner La Roue Ford</h1>
-        <p class="game__lead">Un seul tour par inscription. Le résultat est déterminé par Ford, bonne chance !</p>
+    {# Englobe la roue ET la carte de résultat : en plein écran, seuls les
+       descendants de l'élément plein écran restent affichés, il faut donc
+       que le résultat (et les confettis) y restent inclus. #}
+    <div id="roue-scene">
+        <section class="shell game">
+            <button type="button" class="fullscreen-btn" id="roue-plein-ecran" aria-pressed="false" hidden>
+                <svg class="fullscreen-btn__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path id="roue-plein-ecran-icone" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"
+                          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="fullscreen-btn__label" id="roue-plein-ecran-libelle">Plein écran</span>
+            </button>
 
-        <div class="wheel-stage">
-            <div class="wheel-pointer" aria-hidden="true"></div>
-            <div class="wheel" id="roue" data-spinning="false" role="img"
-                 aria-label="Roue des lots La Roue Ford"></div>
-            <div class="wheel-hub" aria-hidden="true">
-                <img src="{{ asset('assets/imgs/ReadySetFord_White_v1.png') }}" alt="">
+            <p class="eyebrow">Bonjour {{ participant.firstName }}</p>
+            <h1 class="game__title">Faites tourner La Roue Ford</h1>
+            <p class="game__lead">Un seul tour par inscription. Le résultat est déterminé par Ford, bonne chance !</p>
+
+            <div class="wheel-stage">
+                <div class="wheel-pointer" aria-hidden="true"></div>
+                <div class="wheel" id="roue" data-spinning="false" role="img"
+                     aria-label="Roue des lots La Roue Ford"></div>
+                <div class="wheel-hub" aria-hidden="true">
+                    <img src="{{ asset('assets/imgs/ReadySetFord_White_v1.png') }}" alt="">
+                </div>
+            </div>
+
+            <div class="game__actions">
+                <button type="button" class="btn btn--primary btn--lg" id="roue-bouton"
+                        {% if result is not null %}disabled{% endif %}>
+                    Faire tourner la roue
+                </button>
+                <p class="game__error" id="roue-erreur" role="alert" hidden></p>
+                <noscript>
+                    <p class="alert alert--warning">
+                        Activez JavaScript pour faire tourner la roue et découvrir votre résultat.
+                    </p>
+                </noscript>
+            </div>
+
+            <details class="legend">
+                <summary class="legend__summary">Les lots en jeu</summary>
+                <ul class="legend__list">
+                    {% for prize in prizes %}
+                        <li class="legend__item">
+                            <span class="legend__dot" style="background: {{ prize.color|default('#066FEF') }}"></span>
+                            {{ prize.name }}
+                        </li>
+                    {% else %}
+                        <li class="legend__item">Aucun lot n’est disponible pour le moment.</li>
+                    {% endfor %}
+                </ul>
+            </details>
+        </section>
+
+        <div class="result" id="roue-resultat" role="dialog" aria-modal="true" aria-labelledby="roue-resultat-titre"
+             {% if result is null %}hidden{% endif %}>
+            <div class="result__card {% if result is not null and result.isMainPrize %}result__card--win{% endif %}" id="roue-resultat-carte">
+                <p class="result__badge" id="roue-resultat-badge">{{ result is not null ? result.badge : '' }}</p>
+                <h2 class="result__title" id="roue-resultat-titre">{{ result is not null ? result.title : '' }}</h2>
+                <p class="result__detail" id="roue-resultat-detail" {% if result is null or result.detail is empty %}hidden{% endif %}>{{ result is not null ? result.detail : '' }}</p>
+                <p class="result__thanks" id="roue-resultat-merci" {% if result is null %}hidden{% endif %}>
+                    Merci d’avoir participé à La Roue Ford !
+                </p>
+
+                <form method="post" action="{{ path('app_game_restart') }}" class="result__form">
+                    <input type="hidden" name="_token"
+                           value="{{ csrf_token(constant('App\\Controller\\public\\GameController::RESTART_CSRF_TOKEN_ID')) }}">
+                    <button type="submit" class="btn btn--primary btn--lg">Nouvelle partie</button>
+                </form>
             </div>
         </div>
 
-        <div class="game__actions">
-            <button type="button" class="btn btn--primary btn--lg" id="roue-bouton"
-                    {% if result is not null %}disabled{% endif %}>
-                Faire tourner la roue
-            </button>
-            <p class="game__error" id="roue-erreur" role="alert" hidden></p>
-            <noscript>
-                <p class="alert alert--warning">
-                    Activez JavaScript pour faire tourner la roue et découvrir votre résultat.
-                </p>
-            </noscript>
-        </div>
-
-        <details class="legend">
-            <summary class="legend__summary">Les lots en jeu</summary>
-            <ul class="legend__list">
-                {% for segment in segments %}
-                    <li class="legend__item">
-                        <span class="legend__dot" style="background: {{ segment.color|default('#066FEF') }}"></span>
-                        {{ segment.name }}
-                    </li>
-                {% else %}
-                    <li class="legend__item">Aucun lot n’est disponible pour le moment.</li>
-                {% endfor %}
-            </ul>
-        </details>
-    </section>
-
-    <div class="result" id="roue-resultat" role="dialog" aria-modal="true" aria-labelledby="roue-resultat-titre"
-         {% if result is null %}hidden{% endif %}>
-        <div class="result__card {% if result is not null %}result__card--win{% endif %}" id="roue-resultat-carte">
-            <p class="result__badge" id="roue-resultat-badge">Gagné</p>
-            <h2 class="result__title" id="roue-resultat-titre">{{ result is not null ? result.title : '' }}</h2>
-            <p class="result__detail" id="roue-resultat-detail">{{ result is not null ? result.detail : '' }}</p>
-            <p class="result__thanks" id="roue-resultat-merci" {% if result is null %}hidden{% endif %}>
-                Merci d’avoir participé à La Roue Ford !
-            </p>
-
-            <form method="post" action="{{ path('app_game_restart') }}" class="result__form">
-                <input type="hidden" name="_token"
-                       value="{{ csrf_token(constant('App\\Controller\\public\\GameController::RESTART_CSRF_TOKEN_ID')) }}">
-                <button type="submit" class="btn btn--primary btn--lg">Nouvelle partie</button>
-            </form>
-        </div>
+        <canvas class="confetti-canvas" id="confetti-canvas" aria-hidden="true" hidden></canvas>
     </div>
-
-    <canvas class="confetti-canvas" id="confetti-canvas" aria-hidden="true" hidden></canvas>
 {% endblock %}
 
 {% block javascripts %}

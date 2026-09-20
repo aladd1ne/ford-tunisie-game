@@ -6,7 +6,9 @@ namespace App\Tests\Functional;
 
 use App\Entity\Prize;
 use App\Enum\PrizeType;
+use App\Service\Game\SpinResultPresenter;
 use App\Tests\Support\ResetsDatabase;
+use App\Tests\Support\TestRandomNumberGenerator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -30,6 +32,20 @@ final class GameFlowTest extends WebTestCase
         $this->entityManager = self::getContainer()->get(EntityManagerInterface::class);
 
         $this->resetDatabase($this->entityManager);
+
+        // La roue tire désormais à pile ou face avant même de désigner un lot
+        // (voir SpinService) : ces tests portent sur le parcours HTTP, pas sur
+        // la probabilité de gain, donc le pile ou face est forcé côté gagnant
+        // par défaut. Les tests dédiés à la case « perdu » le forcent à leur
+        // tour côté perdant.
+        $this->forceWinningCoinFlip();
+    }
+
+    protected function tearDown(): void
+    {
+        TestRandomNumberGenerator::reset();
+
+        parent::tearDown();
     }
 
     public function testLandingPagePresentsTheGame(): void
@@ -186,18 +202,21 @@ final class GameFlowTest extends WebTestCase
         self::assertNotNull($crawler->filter('#roue-bouton')->attr('disabled'), 'La roue ne doit plus être jouable.');
     }
 
-    public function testConsolationResultShowsTheCongratsMessageToo(): void
+    public function testConsolationPrizeShowsTheOopsMessageInsteadOfCongrats(): void
     {
         $this->createPrize('Porte-clés Ford', 10, null, PrizeType::CONSOLATION);
         $this->register();
 
         $payload = $this->spin($this->openWheelAndReadSpinToken());
 
-        self::assertSame('Félicitations, Marc !', $payload['data']['title']);
+        self::assertSame('Oops', $payload['data']['badge']);
+        self::assertSame(SpinResultPresenter::CONSOLATION_TITLE, $payload['data']['title']);
+        self::assertFalse($payload['data']['isMainPrize']);
+        self::assertSame('Vous avez gagné : Porte-clés Ford', $payload['data']['detail']);
 
         $crawler = $this->client->request('GET', '/jeu');
 
-        self::assertSelectorTextContains('#roue-resultat-titre', 'Félicitations, Marc !');
+        self::assertSelectorTextContains('#roue-resultat-titre', SpinResultPresenter::CONSOLATION_TITLE);
         self::assertSame('Nouvelle partie', trim($crawler->filter('.result__form button')->text()));
     }
 
@@ -242,7 +261,11 @@ final class GameFlowTest extends WebTestCase
         self::assertSame(5, $this->stockOf('Ford Puma un week-end'));
     }
 
-    public function testSpinFailsGracefullyWhenNoPrizeIsAvailable(): void
+    /**
+     * Même un pile ou face gagnant devient une case perdu si la dotation est
+     * épuisée : la roue reste jouable, elle ne renvoie plus d'erreur bloquante.
+     */
+    public function testSpinBecomesALossWhenNoPrizeIsAvailable(): void
     {
         $this->createPrize('Épuisé', 10, 0);
         $this->register();
@@ -250,10 +273,11 @@ final class GameFlowTest extends WebTestCase
         $token = $this->openWheelAndReadSpinToken();
         $payload = $this->spin($token);
 
-        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
-        self::assertSame('fail', $payload['status']);
-        self::assertSame("Aucun lot n'est disponible pour le moment. Merci de réessayer plus tard.", $payload['message']);
-        self::assertSame(0, $this->countRows('spin'));
+        self::assertResponseIsSuccessful();
+        self::assertSame('success', $payload['status']);
+        self::assertNull($payload['data']['prizeUuid']);
+        self::assertSame('Oops', $payload['data']['badge']);
+        self::assertSame(1, $this->countRows('spin'));
     }
 
     public function testNewGameStartsOverWithoutTouchingThePreviousSpin(): void
@@ -285,7 +309,7 @@ final class GameFlowTest extends WebTestCase
         self::assertSame(3, $this->stockOf('Casquette Ford'));
     }
 
-    public function testWheelExposesTheActivePrizesAsSegments(): void
+    public function testWheelExposesAsManyLossSegmentsAsPrizes(): void
     {
         $this->createPrize('Casquette Ford', 10, 5);
         $this->createPrize('Mug Ford', 10, 5);
@@ -295,9 +319,44 @@ final class GameFlowTest extends WebTestCase
         $this->client->request('GET', '/jeu');
         $data = $this->wheelData();
 
-        self::assertCount(2, $data['segments']);
-        self::assertSame(['Casquette Ford', 'Mug Ford'], array_column($data['segments'], 'name'));
+        self::assertCount(4, $data['segments'], 'Autant de cases perdu que de lots.');
+        self::assertSame(
+            ['Casquette Ford', 'Perdu', 'Mug Ford', 'Perdu'],
+            array_column($data['segments'], 'name'),
+        );
+        self::assertSame(
+            ['prize', 'loss', 'prize', 'loss'],
+            array_column($data['segments'], 'type'),
+        );
         self::assertFalse($data['alreadyPlayed']);
+    }
+
+    public function testLosingSpinShowsTheOopsMessageWithNoPrizeAndConsumesNoStock(): void
+    {
+        $prize = $this->createPrize('Casquette Ford', 10, 5);
+        $this->register();
+        $this->forceLosingCoinFlip();
+
+        $token = $this->openWheelAndReadSpinToken();
+        $payload = $this->spin($token);
+
+        self::assertResponseIsSuccessful();
+        self::assertSame('success', $payload['status']);
+        self::assertNull($payload['data']['prizeUuid']);
+        self::assertNull($payload['data']['prizeName']);
+        self::assertFalse($payload['data']['isMainPrize']);
+        self::assertSame('Oops', $payload['data']['badge']);
+        self::assertSame(SpinResultPresenter::CONSOLATION_TITLE, $payload['data']['title']);
+        self::assertNull($payload['data']['detail']);
+        self::assertSame(1, $this->countRows('spin'));
+        self::assertSame(5, $this->stockOf('Casquette Ford'), 'Une case perdu ne doit consommer aucun stock.');
+
+        // Retour sur la page : le résultat perdant est rendu par le serveur.
+        $crawler = $this->client->request('GET', '/jeu');
+
+        self::assertSelectorTextContains('#roue-resultat-titre', SpinResultPresenter::CONSOLATION_TITLE);
+        self::assertSame('Nouvelle partie', trim($crawler->filter('.result__form button')->text()));
+        self::assertNotNull($crawler->filter('#roue-bouton')->attr('disabled'), 'La roue ne doit plus être jouable.');
     }
 
     /* ------------------------------------------------------------------ */
@@ -371,6 +430,22 @@ final class GameFlowTest extends WebTestCase
     private function countRows(string $table): int
     {
         return (int) $this->entityManager->getConnection()->fetchOne(sprintf('SELECT COUNT(*) FROM %s', $table));
+    }
+
+    /**
+     * L'alias RandomNumberGeneratorInterface est résolu vers ce service
+     * concret dès la compilation du conteneur : c'est donc son identifiant
+     * qu'il faut remplacer pour que le pile ou face soit réellement figé,
+     * pour SpinService comme pour WeightedPrizeSelector qui le partagent.
+     */
+    private function forceWinningCoinFlip(): void
+    {
+        TestRandomNumberGenerator::forceValue(1);
+    }
+
+    private function forceLosingCoinFlip(): void
+    {
+        TestRandomNumberGenerator::forceValue(2);
     }
 
     private function stockOf(string $prizeName): ?int

@@ -23,6 +23,13 @@ use Doctrine\ORM\Mapping as ORM;
  *
  * Le nom et le type du lot sont recopiés dans le tirage : le résultat reste
  * traçable même si le lot est renommé, désactivé ou supprimé par la suite.
+ * C'est justement pour cela que la suppression d'un lot ne supprime jamais
+ * les tirages qui le référencent (ON DELETE SET NULL sur prize_id) : seule
+ * la relation $prize disparaît, $prizeName et $prizeType restent intacts.
+ *
+ * La roue compte autant de cases « perdu » que de cases lot (voir
+ * SpinService) : un tirage peut donc ne désigner aucun lot dès le départ,
+ * auquel cas $prize, $prizeName et $prizeType sont null depuis l'origine.
  */
 #[ORM\Entity(repositoryClass: SpinRepository::class)]
 #[ORM\Table(name: 'spin')]
@@ -43,14 +50,14 @@ class Spin implements UuidableInterface
     private Participant $participant;
 
     #[ORM\ManyToOne(targetEntity: Prize::class)]
-    #[ORM\JoinColumn(name: 'prize_id', nullable: false, onDelete: 'RESTRICT')]
-    private Prize $prize;
+    #[ORM\JoinColumn(name: 'prize_id', nullable: true, onDelete: 'SET NULL')]
+    private ?Prize $prize = null;
 
-    #[ORM\Column(type: Types::STRING, length: 120)]
-    private string $prizeName;
+    #[ORM\Column(type: Types::STRING, length: 120, nullable: true)]
+    private ?string $prizeName = null;
 
-    #[ORM\Column(type: Types::STRING, length: 20, enumType: PrizeType::class)]
-    private PrizeType $prizeType;
+    #[ORM\Column(type: Types::STRING, length: 20, enumType: PrizeType::class, nullable: true)]
+    private ?PrizeType $prizeType = null;
 
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE)]
     private DateTimeImmutable $spunAt;
@@ -63,15 +70,15 @@ class Spin implements UuidableInterface
 
     public function __construct(
         Participant $participant,
-        Prize $prize,
+        ?Prize $prize,
         DateTimeImmutable $spunAt,
         ?string $ipAddress = null,
         ?string $userAgent = null,
     ) {
         $this->participant = $participant;
         $this->prize = $prize;
-        $this->prizeName = $prize->getName();
-        $this->prizeType = $prize->getType();
+        $this->prizeName = $prize?->getName();
+        $this->prizeType = $prize?->getType();
         $this->spunAt = $spunAt;
         $this->ipAddress = $ipAddress;
         $this->userAgent = null === $userAgent ? null : mb_substr($userAgent, 0, 255);
@@ -89,19 +96,31 @@ class Spin implements UuidableInterface
         return $this->participant;
     }
 
-    public function getPrize(): Prize
+    public function getPrize(): ?Prize
     {
         return $this->prize;
     }
 
-    public function getPrizeName(): string
+    public function getPrizeName(): ?string
     {
         return $this->prizeName;
     }
 
-    public function getPrizeType(): PrizeType
+    public function getPrizeType(): ?PrizeType
     {
         return $this->prizeType;
+    }
+
+    /**
+     * Faux : le tirage est tombé sur une case « perdu » de la roue.
+     *
+     * S'appuie sur $prizeType (recopié à la volée) plutôt que sur $prize :
+     * un lot supprimé après coup met $prize à null (ON DELETE SET NULL)
+     * sans changer le résultat historique du tirage.
+     */
+    public function isWin(): bool
+    {
+        return null !== $this->prizeType;
     }
 
     public function getSpunAt(): DateTimeImmutable

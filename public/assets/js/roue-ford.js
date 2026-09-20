@@ -20,6 +20,9 @@
     var FULL_TURNS = 6;
     var MAX_LABEL_LENGTH = 22;
 
+    var EXPAND_ICON_PATH = 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5';
+    var COMPRESS_ICON_PATH = 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
+
     var dataNode = document.getElementById('roue-data');
     var wheelNode = document.getElementById('roue');
     var buttonNode = document.getElementById('roue-bouton');
@@ -28,6 +31,8 @@
     var confettiNode = document.getElementById('confetti-canvas');
     var confettiInstance = null;
     var confettiInterval = null;
+
+    initFullscreenToggle();
 
     if (!dataNode || !wheelNode || !buttonNode) {
         return;
@@ -55,8 +60,10 @@
     }
 
     if (isPlayed) {
-        // Partie déjà jouée : la roue est figée sur le lot obtenu.
-        var playedIndex = indexOfPrize(config.playedPrizeUuid);
+        // Partie déjà jouée : la roue est figée sur le résultat obtenu.
+        var playedIndex = config.playedPrizeUuid
+            ? indexOfPrize(config.playedPrizeUuid)
+            : randomLossIndex();
         if (playedIndex !== -1) {
             currentRotation = rotationForIndex(playedIndex, 0);
             wheelNode.style.transform = 'rotate(' + currentRotation + 'deg)';
@@ -266,7 +273,7 @@
     }
 
     function spinTo(result) {
-        var index = indexOfPrize(result.prizeUuid);
+        var index = result.prizeUuid ? indexOfPrize(result.prizeUuid) : randomLossIndex();
 
         if (index === -1) {
             // La dotation a changé depuis l'affichage de la page : on recharge
@@ -335,6 +342,26 @@
         return -1;
     }
 
+    /**
+     * Choisit une case « perdu » au hasard côté client : le backend ne
+     * distingue pas laquelle, toutes ont la même signification.
+     */
+    function randomLossIndex() {
+        var lossIndexes = [];
+
+        for (var i = 0; i < segments.length; i++) {
+            if (segments[i].type === 'loss') {
+                lossIndexes.push(i);
+            }
+        }
+
+        if (lossIndexes.length === 0) {
+            return -1;
+        }
+
+        return lossIndexes[Math.floor(Math.random() * lossIndexes.length)];
+    }
+
     function delay(ms) {
         return new Promise(function (resolve) {
             window.setTimeout(resolve, ms);
@@ -351,8 +378,13 @@
         }
 
         setText('roue-resultat-titre', result.title);
-        setText('roue-resultat-detail', result.detail);
-        setText('roue-resultat-badge', 'Gagné');
+        setText('roue-resultat-badge', result.badge);
+
+        var detail = document.getElementById('roue-resultat-detail');
+        if (detail) {
+            detail.textContent = result.detail || '';
+            detail.hidden = !result.detail;
+        }
 
         var thanks = document.getElementById('roue-resultat-merci');
         if (thanks) {
@@ -361,14 +393,16 @@
 
         var card = document.getElementById('roue-resultat-carte');
         if (card) {
-            card.classList.add('result__card--win');
+            card.classList.toggle('result__card--win', Boolean(result.isMainPrize));
         }
 
         buttonNode.textContent = 'Faire tourner la roue';
         resultNode.hidden = false;
 
-        // Un tour joué est un tour gagné : la célébration est systématique.
-        launchConfetti();
+        // La célébration confettis ne marque que le gain du lot principal.
+        if (result.isMainPrize) {
+            launchConfetti();
+        }
 
         var focusable = resultNode.querySelector('button');
         if (focusable) {
@@ -451,5 +485,90 @@
     function disableButton(message) {
         buttonNode.disabled = true;
         showError(message);
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Passe la scène de jeu (titre, roue, légende) en plein écran. Masqué
+     * par défaut dans le HTML : n'apparaît que si l'API est disponible, ce
+     * qui exclut notamment Safari iOS (aucune prise en charge du plein
+     * écran hors lecture vidéo).
+     */
+    function initFullscreenToggle() {
+        var target = document.getElementById('roue-scene');
+        var toggleButton = document.getElementById('roue-plein-ecran');
+        var label = document.getElementById('roue-plein-ecran-libelle');
+        var icon = document.getElementById('roue-plein-ecran-icone');
+
+        if (!target || !toggleButton || !label) {
+            return;
+        }
+
+        var requestFullscreen = target.requestFullscreen
+            || target.webkitRequestFullscreen
+            || target.mozRequestFullScreen
+            || target.msRequestFullscreen;
+
+        if (!requestFullscreen) {
+            return;
+        }
+
+        toggleButton.hidden = false;
+        toggleButton.addEventListener('click', onToggle);
+
+        ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(
+            function (eventName) {
+                document.addEventListener(eventName, syncState);
+            }
+        );
+
+        syncState();
+
+        function onToggle() {
+            if (isFullscreen()) {
+                exitFullscreen();
+
+                return;
+            }
+
+            var result = requestFullscreen.call(target);
+            if (result && typeof result.catch === 'function') {
+                // Refus du navigateur (ex. hors interaction utilisateur) :
+                // rien de plus à faire, syncState() gardera l'état cohérent.
+                result.catch(function () {});
+            }
+        }
+
+        function exitFullscreen() {
+            var exit = document.exitFullscreen
+                || document.webkitExitFullscreen
+                || document.mozCancelFullScreen
+                || document.msExitFullscreen;
+
+            if (exit) {
+                exit.call(document);
+            }
+        }
+
+        function isFullscreen() {
+            var current = document.fullscreenElement
+                || document.webkitFullscreenElement
+                || document.mozFullScreenElement
+                || document.msFullscreenElement;
+
+            return current === target;
+        }
+
+        function syncState() {
+            var active = isFullscreen();
+
+            toggleButton.setAttribute('aria-pressed', active ? 'true' : 'false');
+            label.textContent = active ? 'Quitter le plein écran' : 'Plein écran';
+
+            if (icon) {
+                icon.setAttribute('d', active ? COMPRESS_ICON_PATH : EXPAND_ICON_PATH);
+            }
+        }
     }
 })();
