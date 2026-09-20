@@ -30,7 +30,10 @@ use Psr\Log\LoggerInterface;
  *  - un lot en rupture de stock n'est jamais attribué, même si plusieurs
  *    joueurs tirent la dernière unité au même instant (UPDATE conditionnel) ;
  *  - tirage et décrément de stock sont dans la même transaction : en cas
- *    d'échec, aucun stock n'est consommé.
+ *    d'échec, aucun stock n'est consommé ;
+ *  - la roue compte autant de cases « perdu » que de lots en jeu : un
+ *    participant a donc une chance sur deux de ne rien gagner, indépendamment
+ *    du poids relatif des lots entre eux.
  */
 final class SpinService
 {
@@ -45,6 +48,7 @@ final class SpinService
         private readonly PrizeRepository $prizeRepository,
         private readonly SpinRepository $spinRepository,
         private readonly PrizeSelectorInterface $prizeSelector,
+        private readonly RandomNumberGeneratorInterface $randomNumberGenerator,
         private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger,
     ) {
@@ -57,7 +61,6 @@ final class SpinService
      * existant est renvoyé tel quel. Un double-clic, un rejeu réseau ou un
      * rafraîchissement ne produisent donc jamais un second résultat.
      *
-     * @throws NoPrizeAvailableException
      * @throws AlreadySpunException
      */
     public function spin(Participant $participant, SpinContext $context = new SpinContext()): Spin
@@ -82,9 +85,6 @@ final class SpinService
         }
     }
 
-    /**
-     * @throws NoPrizeAvailableException
-     */
     private function doSpin(Participant $participant, SpinContext $context): Spin
     {
         // Sérialise les tirages concurrents d'un même participant : la seconde
@@ -97,7 +97,7 @@ final class SpinService
             return $existingSpin;
         }
 
-        $prize = $this->reservePrize();
+        $prize = $this->resolveOutcome();
 
         $spin = new Spin(
             $participant,
@@ -111,11 +111,35 @@ final class SpinService
         $this->entityManager->flush();
 
         $this->logger->info('Tirage enregistré : {prize} pour le participant {uuid}.', [
-            'prize' => $spin->getPrizeName(),
+            'prize' => $spin->getPrizeName() ?? 'perdu',
             'uuid' => (string) $participant->getUuid(),
         ]);
 
         return $spin;
+    }
+
+    /**
+     * Tire à pile ou face si le participant gagne un lot, avant même de
+     * savoir lequel : la roue affiche autant de cases « perdu » que de cases
+     * lot, donc une chance sur deux ne désigne aucun lot.
+     *
+     * Si le tirage gagnant ne trouve plus aucun lot disponible (dotation
+     * épuisée en cours d'opération), le tour est traité comme une case
+     * « perdu » plutôt que comme une erreur bloquante : la roue continue de
+     * tourner normalement une fois les lots physiques distribués.
+     */
+    private function resolveOutcome(): ?Prize
+    {
+        // Ticket 1 = case lot, ticket 2 = case perdu : exactement 50/50.
+        if (1 !== $this->randomNumberGenerator->nextInt(1, 2)) {
+            return null;
+        }
+
+        try {
+            return $this->reservePrize();
+        } catch (NoPrizeAvailableException) {
+            return null;
+        }
     }
 
     /**

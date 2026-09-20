@@ -31,6 +31,13 @@ class GameController extends BaseController
     public const SPIN_CSRF_TOKEN_ID = 'roue_ford_spin';
     public const RESTART_CSRF_TOKEN_ID = 'roue_ford_restart';
 
+    /**
+     * Couleur des cases « perdu », volontairement neutre pour se distinguer
+     * des couleurs de marque utilisées par les lots.
+     */
+    private const LOSS_SEGMENT_COLOR = '#DCE3F0';
+    private const LOSS_SEGMENT_LABEL = 'Perdu';
+
     public function __construct(
         private readonly GameSession $gameSession,
         private readonly SpinResultPresenter $resultPresenter,
@@ -49,10 +56,12 @@ class GameController extends BaseController
         }
 
         $spin = $participant->getSpin();
+        $prizes = $prizeRepository->findForWheel();
 
         return $this->render('game/wheel.html.twig', [
             'participant' => $participant,
-            'segments' => $this->buildSegments($prizeRepository->findForWheel()),
+            'prizes' => $prizes,
+            'segments' => $this->buildSegments($prizes),
             // Déjà joué : le résultat est rendu directement par le serveur.
             'result' => null === $spin ? null : $this->resultPresenter->present($spin),
         ]);
@@ -106,16 +115,33 @@ class GameController extends BaseController
     }
 
     /**
+     * Construit les cases de la roue : une case par lot, plus autant de cases
+     * « perdu » que de lots, en alternance, pour que la roue affiche
+     * visuellement les chances réelles de gain (50/50, voir SpinService).
+     *
      * @param Prize[] $prizes
      *
-     * @return list<array{uuid: string, name: string, color: string|null}>
+     * @return list<array{type: string, uuid: string, name: string, color: string|null}>
      */
     private function buildSegments(array $prizes): array
     {
-        return array_map(static fn (Prize $prize): array => [
-            'uuid' => (string) $prize->getUuid(),
-            'name' => $prize->getName(),
-            'color' => $prize->getColor(),
-        ], $prizes);
+        $segments = [];
+
+        foreach (array_values($prizes) as $index => $prize) {
+            $segments[] = [
+                'type' => 'prize',
+                'uuid' => (string) $prize->getUuid(),
+                'name' => $prize->getName(),
+                'color' => $prize->getColor(),
+            ];
+            $segments[] = [
+                'type' => 'loss',
+                'uuid' => sprintf('loss-%d', $index),
+                'name' => self::LOSS_SEGMENT_LABEL,
+                'color' => self::LOSS_SEGMENT_COLOR,
+            ];
+        }
+
+        return $segments;
     }
 }

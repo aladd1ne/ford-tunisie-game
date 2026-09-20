@@ -13,9 +13,12 @@ use App\Exception\Game\NoPrizeAvailableException;
 use App\Repository\PrizeRepository;
 use App\Repository\SpinRepository;
 use App\Service\Game\PrizeSelectorInterface;
+use App\Service\Game\RandomNumberGeneratorInterface;
 use App\Service\Game\SpinContext;
+use App\Service\Game\SpinResultPresenter;
 use App\Service\Game\SpinService;
 use App\Tests\Integration\DatabaseTestCase;
+use App\Tests\Support\FixedRandomNumberGenerator;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Psr\Log\NullLogger;
@@ -39,6 +42,7 @@ final class SpinServiceTest extends DatabaseTestCase
         self::assertSame('203.0.113.10', $spin->getIpAddress());
         self::assertSame('PHPUnit', $spin->getUserAgent());
         self::assertNotNull($spin->getUuid());
+        self::assertTrue($spin->isWin());
         self::assertSame(4, $this->refreshStock($prize));
     }
 
@@ -89,6 +93,11 @@ final class SpinServiceTest extends DatabaseTestCase
         self::assertSame(12, $this->countSpins());
     }
 
+    /**
+     * Même un tirage « gagnant » au pile ou face devient une case perdu si la
+     * dotation est épuisée entre-temps : la roue continue de tourner
+     * normalement, ce n'est plus une erreur bloquante.
+     */
     public function testStockNeverGoesNegative(): void
     {
         $prize = $this->createPrize('Stock unitaire', 10, 1);
@@ -98,40 +107,50 @@ final class SpinServiceTest extends DatabaseTestCase
 
         self::assertSame(0, $this->refreshStock($prize));
 
-        try {
-            $service->spin($this->createParticipant('b@exemple.fr'));
-            self::fail('Un tirage sans lot disponible doit échouer.');
-        } catch (NoPrizeAvailableException $exception) {
-            self::assertSame("Aucun lot n'est disponible pour le moment. Merci de réessayer plus tard.", $exception->getMessage());
-        }
+        $second = $service->spin($this->createParticipant('b@exemple.fr'));
 
+        self::assertNull($second->getPrize());
+        self::assertFalse($second->isWin());
         self::assertSame(0, $this->refreshStock($prize));
-        self::assertSame(1, $this->countSpins());
+        self::assertSame(2, $this->countSpins());
     }
 
-    public function testNoPrizeAvailableWhenEverythingIsInactiveOrEmpty(): void
+    public function testSpinBecomesALossWhenEverythingIsInactiveOrEmpty(): void
     {
         $this->createPrize('Inactif', 100, null, PrizeType::CONSOLATION, false);
         $this->createPrize('Épuisé', 100, 0);
         $this->createPrize('Poids nul', 0, null);
 
-        $this->expectException(NoPrizeAvailableException::class);
+        $spin = $this->spinService()->spin($this->createParticipant());
 
-        $this->spinService()->spin($this->createParticipant());
+        self::assertNull($spin->getPrize());
+        self::assertNull($spin->getPrizeName());
+        self::assertNull($spin->getPrizeType());
+        self::assertFalse($spin->isWin());
     }
 
-    public function testNoStockIsConsumedWhenTheSpinFails(): void
+    public function testNoStockIsConsumedWhenTheSpinBecomesALoss(): void
     {
         $prize = $this->createPrize('Épuisé', 100, 0);
 
-        try {
-            $this->spinService()->spin($this->createParticipant());
-        } catch (NoPrizeAvailableException) {
-            // attendu
-        }
+        $spin = $this->spinService()->spin($this->createParticipant());
 
+        self::assertNull($spin->getPrize());
         self::assertSame(0, $this->refreshStock($prize));
-        self::assertSame(0, $this->countSpins());
+        self::assertSame(1, $this->countSpins());
+    }
+
+    public function testALosingCoinFlipAwardsNoPrizeEvenWhenStockIsAvailable(): void
+    {
+        $prize = $this->createPrize('Casquette Ford', 10, 5);
+
+        $spin = $this->spinService(null, null, new FixedRandomNumberGenerator(2))
+            ->spin($this->createParticipant());
+
+        self::assertNull($spin->getPrize());
+        self::assertNull($spin->getPrizeName());
+        self::assertFalse($spin->isWin());
+        self::assertSame(5, $this->refreshStock($prize), 'Une case perdu ne doit consommer aucun stock.');
     }
 
     /**
@@ -236,6 +255,38 @@ final class SpinServiceTest extends DatabaseTestCase
         self::assertSame(PrizeType::CONSOLATION, $spin->getPrizeType());
     }
 
+    /**
+     * spin.prize_id est en ON DELETE SET NULL (voir Spin) : supprimer un lot
+     * depuis le back-office ne doit jamais être bloqué par les tirages
+     * passés, et l'historique affiché au participant doit rester correct
+     * puisque prizeName/prizeType sont recopiés indépendamment de la relation.
+     */
+    public function testDeletingAPrizeSetsThePastSpinsPrizeToNullWithoutLosingTheHistory(): void
+    {
+        $prize = $this->createPrize('Enceinte connectée Ford', 10, 5, PrizeType::MAIN);
+        $spin = $this->spinService()->spin($this->createParticipant());
+
+        self::assertSame($prize->getId(), $spin->getPrize()->getId());
+
+        $this->entityManager->remove($prize);
+        $this->entityManager->flush();
+        $this->entityManager->clear();
+
+        $reloaded = self::getContainer()->get(SpinRepository::class)->find($spin->getId());
+
+        self::assertNull($reloaded->getPrize(), 'Le lot supprimé ne doit plus être référencé.');
+        self::assertSame('Enceinte connectée Ford', $reloaded->getPrizeName(), 'Le nom du lot doit rester traçable.');
+        self::assertSame(PrizeType::MAIN, $reloaded->getPrizeType());
+        self::assertTrue($reloaded->isWin(), 'Le tirage reste gagnant même si le lot a été supprimé depuis.');
+
+        $result = self::getContainer()->get(SpinResultPresenter::class)->present($reloaded);
+
+        self::assertTrue($result['isMainPrize']);
+        self::assertSame('Félicitations, Marc !', $result['title']);
+        self::assertSame('Vous avez gagné : Enceinte connectée Ford', $result['detail']);
+        self::assertNull($result['prizeUuid'], 'Plus de lot vivant à référencer.');
+    }
+
     public function testDecrementStockReturnsFalseOnceEmpty(): void
     {
         $prize = $this->createPrize('Stock unitaire', 10, 1);
@@ -248,8 +299,16 @@ final class SpinServiceTest extends DatabaseTestCase
 
     /* ------------------------------------------------------------------ */
 
-    private function spinService(?PrizeSelectorInterface $selector = null, ?MockClock $clock = null): SpinService
-    {
+    /**
+     * Le pile ou face du gain est forcé côté gagnant par défaut : la plupart
+     * de ces tests portent sur le stock ou la sélection pondérée, pas sur la
+     * probabilité de gain elle-même (couverte séparément).
+     */
+    private function spinService(
+        ?PrizeSelectorInterface $selector = null,
+        ?MockClock $clock = null,
+        ?RandomNumberGeneratorInterface $randomNumberGenerator = null,
+    ): SpinService {
         $container = self::getContainer();
 
         return new SpinService(
@@ -257,6 +316,7 @@ final class SpinServiceTest extends DatabaseTestCase
             $container->get(PrizeRepository::class),
             $container->get(SpinRepository::class),
             $selector ?? $container->get(PrizeSelectorInterface::class),
+            $randomNumberGenerator ?? new FixedRandomNumberGenerator(1),
             $clock ?? new MockClock(),
             new NullLogger(),
         );

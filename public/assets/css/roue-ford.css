@@ -480,11 +480,77 @@ img { max-width: 100%; height: auto; }
 
 /* --------------------------------------------------------------------- jeu */
 
-.game { text-align: center; padding-top: 48px; }
+.game { position: relative; text-align: center; padding-top: 64px; }
 
 .game__title { font-size: clamp(1.8rem, 5vw, 2.6rem); color: var(--ford-deep); }
 
 .game__lead { color: var(--muted); max-width: 46ch; margin: 0 auto 32px; }
+
+.fullscreen-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ford-deep);
+    font: inherit;
+    font-size: .85rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: background .15s ease, color .15s ease;
+}
+
+.fullscreen-btn:hover { background: var(--ford-blue-soft); }
+
+.fullscreen-btn[aria-pressed="true"] { background: var(--ford-deep); color: #fff; }
+
+.fullscreen-btn[hidden] { display: none; }
+
+.fullscreen-btn__icon { width: 18px; height: 18px; flex: 0 0 auto; }
+
+/* #roue-scene englobe la roue et la carte de résultat : seul son contenu
+   reste affiché tant que le plein écran est actif. Un sélecteur avec un
+   pseudo-élément fullscreen non reconnu invalide toute la règle dans les
+   navigateurs plus anciens, donc chaque préfixe reste dans sa propre
+   déclaration plutôt que dans une liste partagée. */
+#roue-scene:fullscreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    padding: 32px 20px;
+    background: var(--bg);
+    overflow-y: auto;
+}
+
+#roue-scene:fullscreen .game { padding-top: 0; }
+
+#roue-scene:fullscreen .wheel-stage { width: min(72vmin, 720px); }
+
+#roue-scene:-webkit-full-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    padding: 32px 20px;
+    background: var(--bg);
+    overflow-y: auto;
+}
+
+#roue-scene:-webkit-full-screen .game { padding-top: 0; }
+
+#roue-scene:-webkit-full-screen .wheel-stage { width: min(72vmin, 720px); }
 
 .wheel-stage {
     position: relative;
@@ -663,6 +729,8 @@ img { max-width: 100%; height: auto; }
 
 .result__detail { font-size: 1.05rem; font-weight: 600; }
 
+.result__detail[hidden] { display: none; }
+
 .result__thanks { color: var(--muted); }
 
 .result__thanks[hidden] { display: none; }
@@ -682,6 +750,10 @@ img { max-width: 100%; height: auto; }
     .site-header__logo { width: 150px; }
 
     .form__actions .btn { width: 100%; }
+
+    .fullscreen-btn { position: static; margin: 0 auto 16px; }
+
+    .fullscreen-btn__label { display: none; }
 }
 
 /* Écrans bas (mobile en paysage, petits ordinateurs portables) : on resserre
