@@ -19,9 +19,21 @@ class SpinRepository extends ServiceEntityRepository
         parent::__construct($registry, Spin::class);
     }
 
-    public function findOneByParticipant(Participant $participant): ?Spin
+    /**
+     * Tirage gagnant d'un participant, s'il existe, lu directement en base
+     * (et non via la collection déjà chargée sur l'entité) : c'est ce qui
+     * permet à SpinService de vérifier l'état réel sous verrou pessimiste,
+     * y compris un gain inséré entre-temps par une autre requête.
+     */
+    public function findWinningByParticipant(Participant $participant): ?Spin
     {
-        return $this->findOneBy(['participant' => $participant]);
+        return $this->createQueryBuilder('s')
+            ->andWhere('s.participant = :participant')
+            ->andWhere('s.prizeType IS NOT NULL')
+            ->setParameter('participant', $participant)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
     }
 
     public function save(Spin $spin, bool $flush = true): void

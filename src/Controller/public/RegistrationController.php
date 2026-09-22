@@ -36,30 +36,11 @@ class RegistrationController extends BaseController
             $participant = $registrar->register($registration);
             $this->gameSession->start($participant);
 
-            return $this->redirectToRoute('app_registration_confirmation');
+            return $this->redirectToRoute('app_game');
         }
 
         return $this->render('game/registration.html.twig', [
             'form' => $form->createView(),
         ], new Response(null, $form->isSubmitted() ? Response::HTTP_UNPROCESSABLE_ENTITY : Response::HTTP_OK));
-    }
-
-    #[Route('/inscription/confirmation', name: 'app_registration_confirmation', methods: ['GET'])]
-    public function confirmation(): Response
-    {
-        $participant = $this->gameSession->getParticipant();
-
-        if (null === $participant) {
-            return $this->redirectToRoute('app_registration');
-        }
-
-        // Le tirage est déjà joué : inutile de repasser par la confirmation.
-        if ($participant->hasPlayed()) {
-            return $this->redirectToRoute('app_game');
-        }
-
-        return $this->render('game/confirmation.html.twig', [
-            'participant' => $participant,
-        ]);
     }
 }
