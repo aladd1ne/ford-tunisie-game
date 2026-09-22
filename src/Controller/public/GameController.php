@@ -17,6 +17,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 /**
  * La roue et le tirage.
@@ -41,6 +42,7 @@ class GameController extends BaseController
     public function __construct(
         private readonly GameSession $gameSession,
         private readonly SpinResultPresenter $resultPresenter,
+        private readonly CsrfTokenManagerInterface $csrfTokenManager,
     ) {
     }
 
@@ -55,7 +57,7 @@ class GameController extends BaseController
             return $this->redirectToRoute('app_registration');
         }
 
-        $spin = $participant->getSpin();
+        $spin = $participant->getLatestSpin();
         $prizes = $prizeRepository->findForWheel();
 
         return $this->render('game/wheel.html.twig', [
@@ -70,6 +72,12 @@ class GameController extends BaseController
     /**
      * Détermine le résultat côté serveur. Le JavaScript ne fait qu'animer la
      * roue vers le lot renvoyé ici.
+     *
+     * Le jeton CSRF est régénéré à chaque réponse réussie et renvoyé au
+     * client (nextSpinToken) : un participant peut retenter sa chance après
+     * une case « perdu », mais chaque tentative consomme son propre jeton, ce
+     * qui empêche un rejeu réseau ou un retour arrière du navigateur de
+     * soumettre deux fois la même tentative.
      */
     #[Route('/jeu/tourner', name: 'app_game_spin', methods: ['POST'])]
     public function spin(Request $request, SpinService $spinService): JsonResponse
@@ -95,7 +103,12 @@ class GameController extends BaseController
             return JSend::fail($exception->getMessage(), [], 0, Response::HTTP_CONFLICT);
         }
 
-        return JSend::success('Résultat du tirage.', $this->resultPresenter->present($spin));
+        $nextSpinToken = $this->csrfTokenManager->refreshToken(self::SPIN_CSRF_TOKEN_ID)->getValue();
+
+        return JSend::success('Résultat du tirage.', [
+            ...$this->resultPresenter->present($spin),
+            'nextSpinToken' => $nextSpinToken,
+        ]);
     }
 
     /**
@@ -116,8 +129,9 @@ class GameController extends BaseController
 
     /**
      * Construit les cases de la roue : une case par lot, plus autant de cases
-     * « perdu » que de lots, en alternance, pour que la roue affiche
-     * visuellement les chances réelles de gain (50/50, voir SpinService).
+     * « perdu » que de lots, en alternance. Le résultat réel (70 % de gain,
+     * voir SpinService) est déterminé côté serveur avant l'animation : la
+     * roue anime simplement jusqu'à la case correspondante.
      *
      * @param Prize[] $prizes
      *

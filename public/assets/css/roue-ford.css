@@ -735,7 +735,16 @@ img { max-width: 100%; height: auto; }
 
 .result__thanks[hidden] { display: none; }
 
-.result__form { margin-top: 18px; }
+.result__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 18px;
+}
+
+.result__form { margin: 0; }
 
 @keyframes result-in {
     from { opacity: 0; transform: scale(.97); }
@@ -749,7 +758,8 @@ img { max-width: 100%; height: auto; }
 
     .site-header__logo { width: 150px; }
 
-    .form__actions .btn { width: 100%; }
+    .form__actions .btn,
+    .result__actions .btn { width: 100%; }
 
     .fullscreen-btn { position: static; margin: 0 auto 16px; }
 

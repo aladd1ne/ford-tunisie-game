@@ -16,7 +16,7 @@ use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Parcours complet : accueil → inscription → confirmation → roue → résultat.
+ * Parcours complet : accueil → inscription → roue → résultat.
  */
 final class GameFlowTest extends WebTestCase
 {
@@ -125,36 +125,13 @@ final class GameFlowTest extends WebTestCase
             'registration[phone]' => '',
         ]);
 
-        self::assertResponseRedirects('/inscription/confirmation');
+        self::assertResponseRedirects('/jeu');
         self::assertSame(1, $this->countRows('participant'));
-    }
-
-    public function testConfirmationGreetsTheParticipantByFirstName(): void
-    {
-        $this->register();
-
-        $crawler = $this->client->followRedirect();
-
-        self::assertResponseIsSuccessful();
-        self::assertSelectorTextContains('h1', 'Inscription confirmée !');
-        self::assertSelectorTextContains(
-            '.panel__lead--strong',
-            'Merci Marc. Vous pouvez maintenant faire tourner La Roue Ford et découvrir votre résultat.',
-        );
-        self::assertSame('Faire tourner la roue', trim($crawler->filter('.panel a.btn')->text()));
-        self::assertSame('/jeu', $crawler->filter('.panel a.btn')->attr('href'));
     }
 
     public function testWheelRequiresARegistration(): void
     {
         $this->client->request('GET', '/jeu');
-
-        self::assertResponseRedirects('/inscription');
-    }
-
-    public function testConfirmationRequiresARegistration(): void
-    {
-        $this->client->request('GET', '/inscription/confirmation');
 
         self::assertResponseRedirects('/inscription');
     }
@@ -198,29 +175,36 @@ final class GameFlowTest extends WebTestCase
         self::assertSelectorTextContains('#roue-resultat-titre', 'Félicitations, Marc !');
         self::assertSelectorTextContains('#roue-resultat-detail', 'Vous avez gagné : Ford Puma un week-end');
         self::assertSelectorTextContains('#roue-resultat-merci', 'Merci d’avoir participé à La Roue Ford !');
-        self::assertSame('Nouvelle partie', trim($crawler->filter('.result__form button')->text()));
+        self::assertSame('Nouveau joueur', trim($crawler->filter('.result__form button')->text()));
         self::assertNotNull($crawler->filter('#roue-bouton')->attr('disabled'), 'La roue ne doit plus être jouable.');
+        self::assertNotNull($crawler->filter('#roue-rejouer')->attr('hidden'), 'Un gain ne doit plus laisser rejouer.');
     }
 
-    public function testConsolationPrizeShowsTheOopsMessageInsteadOfCongrats(): void
+    public function testConsolationPrizeShowsTheSameWinMessageAsTheMainPrize(): void
     {
         $this->createPrize('Porte-clés Ford', 10, null, PrizeType::CONSOLATION);
         $this->register();
 
         $payload = $this->spin($this->openWheelAndReadSpinToken());
 
-        self::assertSame('Oops', $payload['data']['badge']);
-        self::assertSame(SpinResultPresenter::CONSOLATION_TITLE, $payload['data']['title']);
-        self::assertFalse($payload['data']['isMainPrize']);
+        self::assertSame(SpinResultPresenter::WIN_BADGE, $payload['data']['badge']);
+        self::assertSame('Félicitations, Marc !', $payload['data']['title']);
+        self::assertTrue($payload['data']['isWin']);
+        self::assertFalse($payload['data']['canRetry']);
         self::assertSame('Vous avez gagné : Porte-clés Ford', $payload['data']['detail']);
 
         $crawler = $this->client->request('GET', '/jeu');
 
-        self::assertSelectorTextContains('#roue-resultat-titre', SpinResultPresenter::CONSOLATION_TITLE);
-        self::assertSame('Nouvelle partie', trim($crawler->filter('.result__form button')->text()));
+        self::assertSelectorTextContains('#roue-resultat-titre', 'Félicitations, Marc !');
+        self::assertSame('Nouveau joueur', trim($crawler->filter('.result__form button')->text()));
     }
 
-    public function testRepeatedSpinRequestsReturnTheSameResult(): void
+    /**
+     * Chaque tentative consomme son propre jeton CSRF (nextSpinToken) : un
+     * rejeu réseau ou un retour arrière du navigateur qui soumet deux fois la
+     * même requête ne doit donc produire qu'un seul tirage.
+     */
+    public function testResubmittingTheSameSpinTokenAfterASuccessIsRejected(): void
     {
         $this->createPrize('Casquette Ford', 10, 5);
         $this->register();
@@ -228,13 +212,58 @@ final class GameFlowTest extends WebTestCase
         $token = $this->openWheelAndReadSpinToken();
 
         $first = $this->spin($token);
-        $second = $this->spin($token);
-        $third = $this->spin($token);
+        self::assertSame('success', $first['status']);
 
-        self::assertSame($first['data']['spinUuid'], $second['data']['spinUuid']);
-        self::assertSame($first['data']['spinUuid'], $third['data']['spinUuid']);
-        self::assertSame(1, $this->countRows('spin'), 'Un double-clic ne doit produire qu\'un seul tirage.');
+        $this->client->request('POST', '/jeu/tourner', [], [], ['HTTP_X-CSRF-Token' => $token]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        self::assertSame(1, $this->countRows('spin'), 'Le jeton déjà utilisé ne doit pas produire un second tirage.');
         self::assertSame(4, $this->stockOf('Casquette Ford'), 'Le stock ne doit être décrémenté qu\'une fois.');
+    }
+
+    /**
+     * Une case « perdu » n'est pas définitive : le jeton renvoyé
+     * (nextSpinToken) permet de retenter sa chance, et chaque tentative
+     * s'ajoute à l'historique du participant jusqu'à un premier gain.
+     */
+    public function testPlayerCanRetryAfterALossUntilTheyWin(): void
+    {
+        $this->createPrize('Casquette Ford', 10, 5);
+        $this->register();
+        $this->forceLosingCoinFlip();
+
+        $token = $this->openWheelAndReadSpinToken();
+        $firstLoss = $this->spin($token);
+
+        self::assertFalse($firstLoss['data']['isWin']);
+        self::assertTrue($firstLoss['data']['canRetry']);
+        self::assertSame(1, $this->countRows('spin'));
+
+        $secondLoss = $this->spin($firstLoss['data']['nextSpinToken']);
+
+        self::assertFalse($secondLoss['data']['isWin']);
+        self::assertTrue($secondLoss['data']['canRetry']);
+        self::assertNotSame($firstLoss['data']['spinUuid'], $secondLoss['data']['spinUuid']);
+        self::assertSame(2, $this->countRows('spin'), 'Chaque tentative doit rester dans l\'historique.');
+
+        $this->forceWinningCoinFlip();
+        $win = $this->spin($secondLoss['data']['nextSpinToken']);
+
+        self::assertTrue($win['data']['isWin']);
+        self::assertFalse($win['data']['canRetry']);
+        self::assertSame(3, $this->countRows('spin'));
+
+        // Une fois gagné, plus aucune tentative n'est acceptée : le même
+        // tirage gagnant est renvoyé tel quel, sans consommer de stock de plus.
+        $again = $this->spin($win['data']['nextSpinToken']);
+
+        self::assertSame($win['data']['spinUuid'], $again['data']['spinUuid']);
+        self::assertSame(3, $this->countRows('spin'));
+
+        $crawler = $this->client->request('GET', '/jeu');
+
+        self::assertSelectorTextContains('#roue-resultat-titre', 'Félicitations, Marc !');
+        self::assertNotNull($crawler->filter('#roue-rejouer')->attr('hidden'), 'Un gain ne doit plus laisser rejouer.');
     }
 
     public function testClientCannotForceAPrize(): void
@@ -276,7 +305,9 @@ final class GameFlowTest extends WebTestCase
         self::assertResponseIsSuccessful();
         self::assertSame('success', $payload['status']);
         self::assertNull($payload['data']['prizeUuid']);
-        self::assertSame('Oops', $payload['data']['badge']);
+        self::assertFalse($payload['data']['isWin']);
+        self::assertTrue($payload['data']['canRetry']);
+        self::assertSame(SpinResultPresenter::LOSS_BADGE, $payload['data']['badge']);
         self::assertSame(1, $this->countRows('spin'));
     }
 
@@ -297,6 +328,9 @@ final class GameFlowTest extends WebTestCase
         $this->client->request('GET', '/jeu');
         self::assertResponseRedirects('/inscription');
 
+        // Le jeton du tirage précédent n'est plus valable, et la session ne
+        // contient plus de participant : la tentative est refusée dans tous
+        // les cas.
         $this->client->request('POST', '/jeu/tourner', [], [], ['HTTP_X-CSRF-Token' => $token]);
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
 
@@ -328,7 +362,8 @@ final class GameFlowTest extends WebTestCase
             ['prize', 'loss', 'prize', 'loss'],
             array_column($data['segments'], 'type'),
         );
-        self::assertFalse($data['alreadyPlayed']);
+        self::assertFalse($data['hasResult']);
+        self::assertFalse($data['alreadyWon']);
     }
 
     public function testLosingSpinShowsTheOopsMessageWithNoPrizeAndConsumesNoStock(): void
@@ -344,19 +379,23 @@ final class GameFlowTest extends WebTestCase
         self::assertSame('success', $payload['status']);
         self::assertNull($payload['data']['prizeUuid']);
         self::assertNull($payload['data']['prizeName']);
-        self::assertFalse($payload['data']['isMainPrize']);
-        self::assertSame('Oops', $payload['data']['badge']);
-        self::assertSame(SpinResultPresenter::CONSOLATION_TITLE, $payload['data']['title']);
+        self::assertFalse($payload['data']['isWin']);
+        self::assertTrue($payload['data']['canRetry']);
+        self::assertSame(SpinResultPresenter::LOSS_BADGE, $payload['data']['badge']);
+        self::assertSame(SpinResultPresenter::LOSS_TITLE, $payload['data']['title']);
         self::assertNull($payload['data']['detail']);
         self::assertSame(1, $this->countRows('spin'));
         self::assertSame(5, $this->stockOf('Casquette Ford'), 'Une case perdu ne doit consommer aucun stock.');
 
-        // Retour sur la page : le résultat perdant est rendu par le serveur.
+        // Retour sur la page : le résultat perdant est rendu par le serveur,
+        // avec le bouton « Rejouer » disponible.
         $crawler = $this->client->request('GET', '/jeu');
 
-        self::assertSelectorTextContains('#roue-resultat-titre', SpinResultPresenter::CONSOLATION_TITLE);
-        self::assertSame('Nouvelle partie', trim($crawler->filter('.result__form button')->text()));
-        self::assertNotNull($crawler->filter('#roue-bouton')->attr('disabled'), 'La roue ne doit plus être jouable.');
+        self::assertSelectorTextContains('#roue-resultat-titre', SpinResultPresenter::LOSS_TITLE);
+        self::assertSame('Nouveau joueur', trim($crawler->filter('.result__form button')->text()));
+        self::assertSame('Rejouer', trim($crawler->filter('#roue-rejouer')->text()));
+        self::assertNull($crawler->filter('#roue-rejouer')->attr('hidden'), 'Une case perdu doit laisser rejouer.');
+        self::assertNotNull($crawler->filter('#roue-bouton')->attr('disabled'), 'Le bouton principal ne resert plus une fois un résultat affiché.');
     }
 
     /* ------------------------------------------------------------------ */
@@ -379,7 +418,7 @@ final class GameFlowTest extends WebTestCase
             'registration[phone]' => '+33 6 12 34 56 78',
         ]);
 
-        self::assertResponseRedirects('/inscription/confirmation');
+        self::assertResponseRedirects('/jeu');
     }
 
     private function openWheelAndReadSpinToken(): string
@@ -445,7 +484,7 @@ final class GameFlowTest extends WebTestCase
 
     private function forceLosingCoinFlip(): void
     {
-        TestRandomNumberGenerator::forceValue(2);
+        TestRandomNumberGenerator::forceValue(10);
     }
 
     private function stockOf(string $prizeName): ?int

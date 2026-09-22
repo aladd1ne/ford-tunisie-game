@@ -16,10 +16,11 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * Tirage effectué par un participant.
  *
- * La relation vers le participant est un OneToOne : Doctrine crée donc un
- * index unique sur « participant_id ». C'est cette contrainte, au niveau de
- * la base de données, qui garantit en dernier ressort qu'un participant ne
- * peut pas jouer deux fois (double-clic, rejeu réseau, requêtes simultanées).
+ * La relation vers le participant est un ManyToOne : un participant peut
+ * accumuler plusieurs tirages, un par tentative (« Rejouer » après une case
+ * « perdu »). Le service applicatif (SpinService) est seul responsable de la
+ * règle métier : dès qu'un tirage gagnant existe pour un participant, plus
+ * aucune nouvelle tentative n'est acceptée pour lui.
  *
  * Le nom et le type du lot sont recopiés dans le tirage : le résultat reste
  * traçable même si le lot est renommé, désactivé ou supprimé par la suite.
@@ -27,9 +28,9 @@ use Doctrine\ORM\Mapping as ORM;
  * les tirages qui le référencent (ON DELETE SET NULL sur prize_id) : seule
  * la relation $prize disparaît, $prizeName et $prizeType restent intacts.
  *
- * La roue compte autant de cases « perdu » que de cases lot (voir
- * SpinService) : un tirage peut donc ne désigner aucun lot dès le départ,
- * auquel cas $prize, $prizeName et $prizeType sont null depuis l'origine.
+ * Un participant a 70 % de chances de gagner un lot à chaque tentative (voir
+ * SpinService) : un tirage peut donc ne désigner aucun lot, auquel cas
+ * $prize, $prizeName et $prizeType sont null depuis l'origine.
  */
 #[ORM\Entity(repositoryClass: SpinRepository::class)]
 #[ORM\Table(name: 'spin')]
@@ -45,7 +46,7 @@ class Spin implements UuidableInterface
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\OneToOne(inversedBy: 'spin', targetEntity: Participant::class)]
+    #[ORM\ManyToOne(inversedBy: 'spins', targetEntity: Participant::class)]
     #[ORM\JoinColumn(name: 'participant_id', nullable: false, onDelete: 'CASCADE')]
     private Participant $participant;
 

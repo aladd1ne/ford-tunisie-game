@@ -23,9 +23,20 @@
     var EXPAND_ICON_PATH = 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5';
     var COMPRESS_ICON_PATH = 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
 
+    // Restauration depuis le cache arrière/avant du navigateur (bfcache) :
+    // le DOM et l'état JS figés (bouton désactivé, roue déjà tournée) sont
+    // rejoués tels quels sans re-exécution du script. On force un
+    // rechargement pour retrouver l'état réel du participant côté serveur.
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+            window.location.reload();
+        }
+    });
+
     var dataNode = document.getElementById('roue-data');
     var wheelNode = document.getElementById('roue');
     var buttonNode = document.getElementById('roue-bouton');
+    var rejouerNode = document.getElementById('roue-rejouer');
     var errorNode = document.getElementById('roue-erreur');
     var resultNode = document.getElementById('roue-resultat');
     var confettiNode = document.getElementById('confetti-canvas');
@@ -49,7 +60,9 @@
     var prefersReducedMotion = window.matchMedia
         && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var isSpinning = false;
-    var isPlayed = Boolean(config.alreadyPlayed);
+    // Seul un gain fige définitivement la partie : une case « perdu » laisse
+    // la tentative suivante ouverte via le bouton « Rejouer ».
+    var isWon = Boolean(config.alreadyWon);
     var currentRotation = 0;
 
     render();
@@ -59,8 +72,8 @@
         return;
     }
 
-    if (isPlayed) {
-        // Partie déjà jouée : la roue est figée sur le résultat obtenu.
+    if (config.hasResult) {
+        // Résultat déjà connu (gain ou perte) : la roue est figée dessus.
         var playedIndex = config.playedPrizeUuid
             ? indexOfPrize(config.playedPrizeUuid)
             : randomLossIndex();
@@ -69,10 +82,22 @@
             wheelNode.style.transform = 'rotate(' + currentRotation + 'deg)';
         }
         buttonNode.disabled = true;
-        return;
     }
 
-    buttonNode.addEventListener('click', onSpin);
+    buttonNode.addEventListener('click', performSpin);
+
+    if (rejouerNode) {
+        rejouerNode.addEventListener('click', function () {
+            // « Rejouer » ne relance pas le tirage directement : il referme
+            // le résultat perdant pour redonner la main sur la roue, que
+            // l'on fait retourner via le bouton principal, désormais visible.
+            resultNode.hidden = true;
+            rejouerNode.hidden = true;
+            buttonNode.disabled = false;
+            buttonNode.textContent = 'Faire tourner la roue';
+            buttonNode.focus();
+        });
+    }
 
     /* ------------------------------------------------------------------ */
 
@@ -220,9 +245,10 @@
 
     /* ------------------------------------------------------------------ */
 
-    function onSpin() {
-        // Garde-fou anti double-clic : le backend est de toute façon idempotent.
-        if (isSpinning || isPlayed) {
+    function performSpin() {
+        // Garde-fou anti double-clic : le backend est de toute façon idempotent
+        // une fois la partie gagnée.
+        if (isSpinning || isWon) {
             return;
         }
 
@@ -250,19 +276,29 @@
                     throw new Error(messageOf(result.payload));
                 }
 
-                isPlayed = true;
+                var data = result.payload.data;
+                // Chaque tentative consomme son jeton : la suivante (page
+                // rechargée ou nouvelle tentative après « Rejouer ») utilise
+                // celui renvoyé ici.
+                config.csrfToken = data.nextSpinToken || config.csrfToken;
+                isWon = Boolean(data.isWin);
 
-                return spinTo(result.payload.data).then(function () {
-                    showResult(result.payload.data);
+                return spinTo(data).then(function () {
+                    showResult(data);
                 });
             })
             .catch(function (error) {
-                isSpinning = false;
                 buttonNode.disabled = false;
                 buttonNode.textContent = 'Faire tourner la roue';
                 showError(error && error.message
                     ? error.message
                     : 'Le tirage n’a pas pu aboutir. Merci de réessayer.');
+            })
+            .finally(function () {
+                // Sur un succès comme sur un échec, la tentative en cours est
+                // terminée : sans ça, toute tentative suivante (après un
+                // « Rejouer ») resterait bloquée par ce garde-fou.
+                isSpinning = false;
             });
     }
 
@@ -393,18 +429,30 @@
 
         var card = document.getElementById('roue-resultat-carte');
         if (card) {
-            card.classList.toggle('result__card--win', Boolean(result.isMainPrize));
+            card.classList.toggle('result__card--win', Boolean(result.isWin));
         }
 
+        // Le bouton principal ne resert jamais une fois un résultat affiché :
+        // « Rejouer » (le cas échéant) prend le relais dans la carte résultat.
+        buttonNode.disabled = true;
         buttonNode.textContent = 'Faire tourner la roue';
+
+        if (rejouerNode) {
+            rejouerNode.hidden = !result.canRetry;
+            rejouerNode.disabled = !result.canRetry;
+            rejouerNode.textContent = 'Rejouer';
+        }
+
         resultNode.hidden = false;
 
-        // La célébration confettis ne marque que le gain du lot principal.
-        if (result.isMainPrize) {
+        // La célébration confettis marque tout gain, quel que soit le lot.
+        if (result.isWin) {
             launchConfetti();
         }
 
-        var focusable = resultNode.querySelector('button');
+        var focusable = (result.canRetry && rejouerNode && !rejouerNode.hidden)
+            ? rejouerNode
+            : resultNode.querySelector('.result__form button');
         if (focusable) {
             focusable.focus();
         }

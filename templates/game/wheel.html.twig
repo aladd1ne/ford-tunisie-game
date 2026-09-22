@@ -21,7 +21,6 @@
 
             <p class="eyebrow">Bonjour {{ participant.firstName }}</p>
             <h1 class="game__title">Faites tourner La Roue Ford</h1>
-            <p class="game__lead">Un seul tour par inscription. Le résultat est déterminé par Ford, bonne chance !</p>
 
             <div class="wheel-stage">
                 <div class="wheel-pointer" aria-hidden="true"></div>
@@ -62,7 +61,7 @@
 
         <div class="result" id="roue-resultat" role="dialog" aria-modal="true" aria-labelledby="roue-resultat-titre"
              {% if result is null %}hidden{% endif %}>
-            <div class="result__card {% if result is not null and result.isMainPrize %}result__card--win{% endif %}" id="roue-resultat-carte">
+            <div class="result__card {% if result is not null and result.isWin %}result__card--win{% endif %}" id="roue-resultat-carte">
                 <p class="result__badge" id="roue-resultat-badge">{{ result is not null ? result.badge : '' }}</p>
                 <h2 class="result__title" id="roue-resultat-titre">{{ result is not null ? result.title : '' }}</h2>
                 <p class="result__detail" id="roue-resultat-detail" {% if result is null or result.detail is empty %}hidden{% endif %}>{{ result is not null ? result.detail : '' }}</p>
@@ -70,11 +69,17 @@
                     Merci d’avoir participé à La Roue Ford !
                 </p>
 
-                <form method="post" action="{{ path('app_game_restart') }}" class="result__form">
-                    <input type="hidden" name="_token"
-                           value="{{ csrf_token(constant('App\\Controller\\public\\GameController::RESTART_CSRF_TOKEN_ID')) }}">
-                    <button type="submit" class="btn btn--primary btn--lg">Nouvelle partie</button>
-                </form>
+                <div class="result__actions" id="roue-resultat-actions">
+                    <button type="button" class="btn btn--primary btn--lg" id="roue-rejouer"
+                            {% if result is null or not result.canRetry %}hidden{% endif %}>
+                        Rejouer
+                    </button>
+                    <form method="post" action="{{ path('app_game_restart') }}" class="result__form">
+                        <input type="hidden" name="_token"
+                               value="{{ csrf_token(constant('App\\Controller\\public\\GameController::RESTART_CSRF_TOKEN_ID')) }}">
+                        <button type="submit" class="btn btn--ghost btn--lg">Nouveau joueur</button>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -88,7 +93,8 @@
             segments: segments,
             spinUrl: path('app_game_spin'),
             csrfToken: spin_token,
-            alreadyPlayed: result is not null,
+            hasResult: result is not null,
+            alreadyWon: result is not null and result.isWin,
             playedPrizeUuid: result is not null ? result.prizeUuid : null
         }|json_encode|raw }}
     </script>

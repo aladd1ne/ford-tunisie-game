@@ -8,15 +8,19 @@ use App\Entity\Interface\UuidableInterface;
 use App\Entity\Trait\TimestampableEntityTrait;
 use App\Entity\Trait\UuidableEntityTrait;
 use App\Repository\ParticipantRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Participant inscrit au jeu « La Roue Ford ».
  *
- * Un participant est créé à chaque inscription : rejouer une partie
- * (« Nouvelle partie ») crée donc un nouveau participant, ce qui garantit
- * qu'un tirage déjà effectué ne peut jamais être rejoué ni modifié.
+ * Un participant peut accumuler plusieurs tirages : chaque case « perdu »
+ * peut être suivie d'une nouvelle tentative (« Rejouer »). Dès qu'un tirage
+ * gagnant existe, SpinService refuse toute nouvelle tentative pour ce
+ * participant — seul « Nouveau joueur » (qui crée un tout autre participant)
+ * permet alors de rejouer.
  */
 #[ORM\Entity(repositoryClass: ParticipantRepository::class)]
 #[ORM\Table(name: 'participant')]
@@ -47,8 +51,12 @@ class Participant implements UuidableInterface
     #[ORM\Column(type: Types::STRING, length: 40, nullable: true)]
     private ?string $phone = null;
 
-    #[ORM\OneToOne(mappedBy: 'participant', targetEntity: Spin::class)]
-    private ?Spin $spin = null;
+    /**
+     * @var Collection<int, Spin>
+     */
+    #[ORM\OneToMany(mappedBy: 'participant', targetEntity: Spin::class)]
+    #[ORM\OrderBy(['id' => 'ASC'])]
+    private Collection $spins;
 
     public function __construct(
         string $firstName,
@@ -62,6 +70,7 @@ class Participant implements UuidableInterface
         $this->company = $company;
         $this->email = $email;
         $this->phone = $phone;
+        $this->spins = new ArrayCollection();
 
         $this->generateUuid();
     }
@@ -131,14 +140,45 @@ class Participant implements UuidableInterface
         return $this;
     }
 
-    public function getSpin(): ?Spin
+    /**
+     * @return Collection<int, Spin>
+     */
+    public function getSpins(): Collection
     {
-        return $this->spin;
+        return $this->spins;
+    }
+
+    /**
+     * Tentative la plus récente, pour l'affichage (page /jeu).
+     */
+    public function getLatestSpin(): ?Spin
+    {
+        return $this->spins->isEmpty() ? null : $this->spins->last();
+    }
+
+    /**
+     * Le tirage gagnant, s'il existe. Il y en a au plus un : SpinService
+     * refuse toute nouvelle tentative une fois qu'un participant a gagné.
+     */
+    public function getWinningSpin(): ?Spin
+    {
+        foreach ($this->spins as $spin) {
+            if ($spin->isWin()) {
+                return $spin;
+            }
+        }
+
+        return null;
+    }
+
+    public function hasWon(): bool
+    {
+        return null !== $this->getWinningSpin();
     }
 
     public function hasPlayed(): bool
     {
-        return null !== $this->spin;
+        return !$this->spins->isEmpty();
     }
 
     public function getFullName(): string
@@ -151,6 +191,6 @@ class Participant implements UuidableInterface
      */
     public function getWonPrizeName(): ?string
     {
-        return $this->spin?->getPrizeName();
+        return $this->getWinningSpin()?->getPrizeName();
     }
 }

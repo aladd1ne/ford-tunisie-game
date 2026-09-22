@@ -20,7 +20,6 @@ use App\Service\Game\SpinService;
 use App\Tests\Integration\DatabaseTestCase;
 use App\Tests\Support\FixedRandomNumberGenerator;
 use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Psr\Log\NullLogger;
 use Symfony\Component\Clock\MockClock;
 
@@ -46,7 +45,11 @@ final class SpinServiceTest extends DatabaseTestCase
         self::assertSame(4, $this->refreshStock($prize));
     }
 
-    public function testSpinningTwiceReturnsTheSameResultAndConsumesStockOnce(): void
+    /**
+     * Un tirage gagnant est toujours le dernier : une fois gagné, spin()
+     * redevient idempotent et ne consomme plus de stock supplémentaire.
+     */
+    public function testSpinningAgainAfterAWinReturnsTheSameResultAndConsumesStockOnce(): void
     {
         $prize = $this->createPrize('Mug Ford', 10, 5);
         $participant = $this->createParticipant();
@@ -58,23 +61,42 @@ final class SpinServiceTest extends DatabaseTestCase
 
         self::assertSame($first->getId(), $second->getId());
         self::assertSame($first->getId(), $third->getId());
-        self::assertSame(4, $this->refreshStock($prize), 'Un rejeu ne doit jamais reconsommer du stock.');
+        self::assertSame(4, $this->refreshStock($prize), 'Un rejeu après un gain ne doit jamais reconsommer du stock.');
         self::assertSame(1, $this->countSpins());
     }
 
-    public function testDatabaseRefusesASecondSpinForTheSameParticipant(): void
+    /**
+     * À l'inverse, une case « perdu » n'est pas définitive : chaque nouvelle
+     * tentative crée un tirage distinct tant qu'aucun gain n'a eu lieu.
+     */
+    public function testSpinningAgainAfterALossCreatesANewSpin(): void
+    {
+        $this->createPrize('Casquette Ford', 10, 5);
+        $participant = $this->createParticipant();
+        $service = $this->spinService(null, null, new FixedRandomNumberGenerator(10));
+
+        $first = $service->spin($participant);
+        $second = $service->spin($participant);
+
+        self::assertFalse($first->isWin());
+        self::assertFalse($second->isWin());
+        self::assertNotSame($first->getId(), $second->getId());
+        self::assertSame(2, $this->countSpins());
+    }
+
+    public function testDatabaseAllowsSeveralSpinsForTheSameParticipant(): void
     {
         $prize = $this->createPrize('Porte-clés Ford', 10);
         $participant = $this->createParticipant();
 
-        $this->spinService()->spin($participant);
-
-        // Contournement volontaire du service : c'est la contrainte d'unicité
-        // en base qui doit faire barrage.
-        $this->expectException(UniqueConstraintViolationException::class);
-
+        // Contournement volontaire du service : la base ne doit plus refuser
+        // un second tirage pour le même participant (index unique retiré au
+        // profit d'un index simple, voir la migration correspondante).
+        $this->entityManager->persist(new Spin($participant, null, new \DateTimeImmutable()));
         $this->entityManager->persist(new Spin($participant, $prize, new \DateTimeImmutable()));
         $this->entityManager->flush();
+
+        self::assertSame(2, $this->countSpins());
     }
 
     public function testAnExhaustedPrizeIsNeverAwardedAgain(): void
@@ -144,7 +166,7 @@ final class SpinServiceTest extends DatabaseTestCase
     {
         $prize = $this->createPrize('Casquette Ford', 10, 5);
 
-        $spin = $this->spinService(null, null, new FixedRandomNumberGenerator(2))
+        $spin = $this->spinService(null, null, new FixedRandomNumberGenerator(10))
             ->spin($this->createParticipant());
 
         self::assertNull($spin->getPrize());
@@ -281,7 +303,7 @@ final class SpinServiceTest extends DatabaseTestCase
 
         $result = self::getContainer()->get(SpinResultPresenter::class)->present($reloaded);
 
-        self::assertTrue($result['isMainPrize']);
+        self::assertTrue($result['isWin']);
         self::assertSame('Félicitations, Marc !', $result['title']);
         self::assertSame('Vous avez gagné : Enceinte connectée Ford', $result['detail']);
         self::assertNull($result['prizeUuid'], 'Plus de lot vivant à référencer.');

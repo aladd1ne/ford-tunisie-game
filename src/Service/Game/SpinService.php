@@ -7,11 +7,9 @@ namespace App\Service\Game;
 use App\Entity\Participant;
 use App\Entity\Prize;
 use App\Entity\Spin;
-use App\Exception\Game\AlreadySpunException;
 use App\Exception\Game\NoPrizeAvailableException;
 use App\Repository\PrizeRepository;
 use App\Repository\SpinRepository;
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Clock\ClockInterface;
@@ -25,15 +23,17 @@ use Psr\Log\LoggerInterface;
  * contentent de lui transmettre un participant et un contexte de traçabilité.
  *
  * Garanties apportées :
- *  - un participant ne joue qu'une seule fois (verrou pessimiste sur la ligne
- *    du participant + index unique sur spin.participant_id) ;
+ *  - un participant peut retenter sa chance après une case « perdu », mais
+ *    plus aucune tentative n'est acceptée dès qu'il a gagné (verrou
+ *    pessimiste sur la ligne du participant + relecture en base du tirage
+ *    gagnant sous ce verrou) ;
  *  - un lot en rupture de stock n'est jamais attribué, même si plusieurs
  *    joueurs tirent la dernière unité au même instant (UPDATE conditionnel) ;
  *  - tirage et décrément de stock sont dans la même transaction : en cas
  *    d'échec, aucun stock n'est consommé ;
- *  - la roue compte autant de cases « perdu » que de lots en jeu : un
- *    participant a donc une chance sur deux de ne rien gagner, indépendamment
- *    du poids relatif des lots entre eux.
+ *  - à chaque tentative, un participant a 70 % de chances de gagner un lot
+ *    et 30 % de ne rien gagner, indépendamment du poids relatif des lots
+ *    entre eux.
  */
 final class SpinService
 {
@@ -57,44 +57,35 @@ final class SpinService
     /**
      * Fait tourner la roue pour un participant.
      *
-     * L'opération est idempotente : si le participant a déjà joué, son tirage
-     * existant est renvoyé tel quel. Un double-clic, un rejeu réseau ou un
-     * rafraîchissement ne produisent donc jamais un second résultat.
-     *
-     * @throws AlreadySpunException
+     * Chaque case « perdu » peut être suivie d'une nouvelle tentative : ce
+     * n'est que lorsqu'un tirage gagnant existe déjà que l'opération devient
+     * idempotente et renvoie ce tirage tel quel, sans jamais en créer un
+     * second (double-clic, rejeu réseau ou tentative après un gain).
      */
     public function spin(Participant $participant, SpinContext $context = new SpinContext()): Spin
     {
-        $existingSpin = $this->spinRepository->findOneByParticipant($participant);
+        $winningSpin = $this->spinRepository->findWinningByParticipant($participant);
 
-        if (null !== $existingSpin) {
-            return $existingSpin;
+        if (null !== $winningSpin) {
+            return $winningSpin;
         }
 
-        try {
-            return $this->entityManager->wrapInTransaction(
-                fn (): Spin => $this->doSpin($participant, $context),
-            );
-        } catch (UniqueConstraintViolationException $exception) {
-            // Deux tirages réellement simultanés : la base a tranché.
-            $this->logger->notice('Tirage concurrent rejeté pour le participant {uuid}.', [
-                'uuid' => (string) $participant->getUuid(),
-            ]);
-
-            throw new AlreadySpunException($exception);
-        }
+        return $this->entityManager->wrapInTransaction(
+            fn (): Spin => $this->doSpin($participant, $context),
+        );
     }
 
     private function doSpin(Participant $participant, SpinContext $context): Spin
     {
-        // Sérialise les tirages concurrents d'un même participant : la seconde
-        // requête attend la fin de la première, puis retrouve son tirage.
+        // Sérialise les tentatives concurrentes d'un même participant : la
+        // seconde requête attend la fin de la première avant de relire l'état
+        // réel (a-t-il gagné entre-temps ?) sous ce même verrou.
         $this->entityManager->lock($participant, LockMode::PESSIMISTIC_WRITE);
 
-        $existingSpin = $this->spinRepository->findOneByParticipant($participant);
+        $winningSpin = $this->spinRepository->findWinningByParticipant($participant);
 
-        if (null !== $existingSpin) {
-            return $existingSpin;
+        if (null !== $winningSpin) {
+            return $winningSpin;
         }
 
         $prize = $this->resolveOutcome();
@@ -120,8 +111,7 @@ final class SpinService
 
     /**
      * Tire à pile ou face si le participant gagne un lot, avant même de
-     * savoir lequel : la roue affiche autant de cases « perdu » que de cases
-     * lot, donc une chance sur deux ne désigne aucun lot.
+     * savoir lequel : 70 % de chances de gagner, 30 % de ne rien gagner.
      *
      * Si le tirage gagnant ne trouve plus aucun lot disponible (dotation
      * épuisée en cours d'opération), le tour est traité comme une case
@@ -130,8 +120,8 @@ final class SpinService
      */
     private function resolveOutcome(): ?Prize
     {
-        // Ticket 1 = case lot, ticket 2 = case perdu : exactement 50/50.
-        if (1 !== $this->randomNumberGenerator->nextInt(1, 2)) {
+        // Tickets 1 à 7 = case lot (70 %), tickets 8 à 10 = case perdu (30 %).
+        if ($this->randomNumberGenerator->nextInt(1, 10) > 7) {
             return null;
         }
 
