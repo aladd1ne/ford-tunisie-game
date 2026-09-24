@@ -8,6 +8,7 @@ use App\Entity\Participant;
 use App\Entity\Prize;
 use App\Entity\Spin;
 use App\Exception\Game\NoPrizeAvailableException;
+use App\Exception\Game\NotAuthorizedException;
 use App\Repository\PrizeRepository;
 use App\Repository\SpinRepository;
 use Doctrine\DBAL\LockMode;
@@ -23,17 +24,16 @@ use Psr\Log\LoggerInterface;
  * contentent de lui transmettre un participant et un contexte de traçabilité.
  *
  * Garanties apportées :
- *  - un participant peut retenter sa chance après une case « perdu », mais
- *    plus aucune tentative n'est acceptée dès qu'il a gagné (verrou
- *    pessimiste sur la ligne du participant + relecture en base du tirage
- *    gagnant sous ce verrou) ;
+ *  - seul un participant autorisé depuis le back-office peut jouer ;
+ *  - chaque participant ne joue qu'une seule fois, qu'il gagne ou non
+ *    (verrou pessimiste sur la ligne du participant + relecture en base de
+ *    son tirage sous ce verrou) ;
  *  - un lot en rupture de stock n'est jamais attribué, même si plusieurs
  *    joueurs tirent la dernière unité au même instant (UPDATE conditionnel) ;
  *  - tirage et décrément de stock sont dans la même transaction : en cas
  *    d'échec, aucun stock n'est consommé ;
- *  - à chaque tentative, un participant a 70 % de chances de gagner un lot
- *    et 30 % de ne rien gagner, indépendamment du poids relatif des lots
- *    entre eux.
+ *  - un participant a 70 % de chances de gagner un lot et 30 % de ne rien
+ *    gagner, indépendamment du poids relatif des lots entre eux.
  */
 final class SpinService
 {
@@ -57,17 +57,18 @@ final class SpinService
     /**
      * Fait tourner la roue pour un participant.
      *
-     * Chaque case « perdu » peut être suivie d'une nouvelle tentative : ce
-     * n'est que lorsqu'un tirage gagnant existe déjà que l'opération devient
-     * idempotente et renvoie ce tirage tel quel, sans jamais en créer un
-     * second (double-clic, rejeu réseau ou tentative après un gain).
+     * L'opération est idempotente : si le participant a déjà joué, son tirage
+     * est renvoyé tel quel, sans jamais en créer un second (double-clic,
+     * rejeu réseau ou nouvelle tentative).
+     *
+     * @throws NotAuthorizedException le participant n'a pas été autorisé à jouer
      */
     public function spin(Participant $participant, SpinContext $context = new SpinContext()): Spin
     {
-        $winningSpin = $this->spinRepository->findWinningByParticipant($participant);
+        $existingSpin = $this->spinRepository->findOneByParticipant($participant);
 
-        if (null !== $winningSpin) {
-            return $winningSpin;
+        if (null !== $existingSpin) {
+            return $existingSpin;
         }
 
         return $this->entityManager->wrapInTransaction(
@@ -79,13 +80,17 @@ final class SpinService
     {
         // Sérialise les tentatives concurrentes d'un même participant : la
         // seconde requête attend la fin de la première avant de relire l'état
-        // réel (a-t-il gagné entre-temps ?) sous ce même verrou.
+        // réel (a-t-il joué entre-temps ?) sous ce même verrou.
         $this->entityManager->lock($participant, LockMode::PESSIMISTIC_WRITE);
 
-        $winningSpin = $this->spinRepository->findWinningByParticipant($participant);
+        $existingSpin = $this->spinRepository->findOneByParticipant($participant);
 
-        if (null !== $winningSpin) {
-            return $winningSpin;
+        if (null !== $existingSpin) {
+            return $existingSpin;
+        }
+
+        if (!$participant->isPlayAuthorized()) {
+            throw new NotAuthorizedException();
         }
 
         $prize = $this->resolveOutcome();
@@ -110,7 +115,7 @@ final class SpinService
     }
 
     /**
-     * Tire à pile ou face si le participant gagne un lot, avant même de
+     * Tire au sort si le participant gagne un lot, avant même de
      * savoir lequel : 70 % de chances de gagner, 30 % de ne rien gagner.
      *
      * Si le tirage gagnant ne trouve plus aucun lot disponible (dotation

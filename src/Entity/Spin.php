@@ -16,11 +16,10 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * Tirage effectué par un participant.
  *
- * La relation vers le participant est un ManyToOne : un participant peut
- * accumuler plusieurs tirages, un par tentative (« Rejouer » après une case
- * « perdu »). Le service applicatif (SpinService) est seul responsable de la
- * règle métier : dès qu'un tirage gagnant existe pour un participant, plus
- * aucune nouvelle tentative n'est acceptée pour lui.
+ * Chaque participant ne joue qu'une seule fois, qu'il gagne ou non. La
+ * relation reste un ManyToOne (sans index unique) car l'historique antérieur
+ * peut contenir plusieurs tentatives par participant : c'est SpinService,
+ * sous verrou pessimiste, qui garantit qu'aucun second tirage n'est créé.
  *
  * Le nom et le type du lot sont recopiés dans le tirage : le résultat reste
  * traçable même si le lot est renommé, désactivé ou supprimé par la suite.
@@ -28,7 +27,7 @@ use Doctrine\ORM\Mapping as ORM;
  * les tirages qui le référencent (ON DELETE SET NULL sur prize_id) : seule
  * la relation $prize disparaît, $prizeName et $prizeType restent intacts.
  *
- * Un participant a 70 % de chances de gagner un lot à chaque tentative (voir
+ * Un participant a 70 % de chances de gagner un lot lors de son tirage (voir
  * SpinService) : un tirage peut donc ne désigner aucun lot, auquel cas
  * $prize, $prizeName et $prizeType sont null depuis l'origine.
  */

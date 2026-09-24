@@ -1,7 +1,13 @@
 # La Roue Ford
 
-Jeu promotionnel « La Roue Ford » : le visiteur s’inscrit, fait tourner une roue
-et découvre le cadeau que le serveur lui a attribué.
+Jeu promotionnel « La Roue Ford » : le visiteur s’inscrit, se présente à
+l’accueil où l’équipe l’autorise à jouer depuis le back-office, puis fait
+tourner la roue une seule fois et découvre le cadeau que le serveur lui a
+attribué.
+
+L’inscription et la roue sont deux interfaces indépendantes : la page
+d’inscription ne donne pas accès à la roue, et la roue (écran public, sans
+formulaire) n’accueille que les participants autorisés à l’entrée.
 
 Application Symfony 6.4 / PHP 8.2, rendu serveur en Twig, JavaScript limité à
 l’animation de la roue.
@@ -12,28 +18,33 @@ l’animation de la roue.
 |---|---|---|
 | Accueil | `GET /` | Titre, accroche et bouton **Participer** |
 | Inscription | `GET\|POST /inscription` | Formulaire Prénom, Nom, Société ou agence, Adresse e-mail, Téléphone (facultatif) |
-| Confirmation | `GET /inscription/confirmation` | « Inscription confirmée ! » + bouton **Faire tourner la roue** |
-| Roue | `GET /jeu` | La roue et le bouton **Faire tourner la roue** |
+| Confirmation | `GET /inscription/confirmation` | « Inscription confirmée » + invitation à se présenter à l’accueil |
+| Accueil (équipe) | `/admin` › Inscriptions | Recherche du visiteur puis **Autoriser à jouer** |
+| Roue | `GET /jeu` | Écran public : « En attente du prochain joueur », puis « Bonjour {prénom} » et **Faire tourner la roue** |
+| Joueur attendu | `GET /jeu/joueur` | JSON interrogé par la roue toutes les 3 s |
 | Tirage | `POST /jeu/tourner` | Réponse JSON : le résultat décidé par le serveur |
-| Nouvelle partie | `POST /nouvelle-partie` | Réinitialise la session et renvoie à l’accueil |
 
-L’inscription est obligatoire : `/jeu` et `/jeu/tourner` refusent tout visiteur
-sans participant en session.
+Un visiteur non inscrit passe d’abord par `/inscription` (lien « Inscrire un
+visiteur » dans le back-office). La roue accueille le dernier participant
+autorisé qui n’a pas encore joué ; après le résultat, **Terminer** (ou une
+fermeture automatique après 20 s) la remet en attente du joueur suivant. Il
+n’y a pas de « Rejouer ».
 
 ## Le résultat est décidé côté serveur
 
 C’est la règle centrale de l’application.
 
-* Le navigateur envoie un `POST /jeu/tourner` **sans aucun paramètre** ; tout
-  champ qu’il ajouterait serait ignoré.
-* Le participant est lu dans la session serveur, jamais dans la requête.
+* Le navigateur envoie un `POST /jeu/tourner` avec **uniquement** l’identifiant
+  du joueur attendu (`participant`) ; tout autre champ serait ignoré.
+* Le serveur refuse le tirage si ce participant n’a pas été autorisé depuis le
+  back-office ou s’il a déjà joué.
 * `App\Service\Game\SpinService` choisit le lot, réserve le stock et enregistre
   le tirage, puis renvoie le résultat.
 * `public/assets/js/roue-ford.js` se contente de faire tourner la roue jusqu’au
   secteur du lot reçu.
 
 La requête de tirage est protégée par un jeton CSRF (en-tête `X-CSRF-Token`),
-comme le formulaire d’inscription et le bouton « Nouvelle partie ».
+comme le formulaire d’inscription.
 
 ## Architecture
 
@@ -50,9 +61,10 @@ src/
 ├── Exception/Game/                     Exceptions métier (messages en français)
 ├── Form/RegistrationType.php
 ├── Repository/                         Accès aux données, dont le décrément atomique du stock
+├── Service/Registration/
+│   └── ParticipantRegistrar.php        Inscription (aucun accès à la roue)
 └── Service/Game/
-    ├── GameSession.php                 Suivi du participant en session
-    ├── ParticipantRegistrar.php        Inscription
+    ├── PlayAuthorization.php           Autorisation de jouer et joueur attendu
     ├── PrizeSelectorInterface.php      Stratégie de tirage (remplaçable via un alias)
     ├── WeightedPrizeSelector.php       Tirage aléatoire pondéré
     ├── RandomNumberGeneratorInterface.php
@@ -87,18 +99,18 @@ consomme aucun stock.
 
 ### Un seul tirage par participant
 
-Trois garde-fous superposés :
+Gagnant ou perdant, chaque participant ne joue qu’une fois :
 
-1. `SpinService::spin()` est idempotent : si un tirage existe, il est renvoyé
-   tel quel (double-clic, rejeu réseau, rafraîchissement).
-2. Un verrou pessimiste sur la ligne du participant sérialise deux requêtes
-   réellement simultanées.
-3. `spin.participant_id` porte un index unique : la base tranche en dernier
-   ressort.
+1. `POST /jeu/tourner` refuse (403) un participant qui a déjà joué ou qui n’a
+   pas été autorisé, et le back-office ne propose plus « Autoriser à jouer »
+   une fois le tirage enregistré (`PlayAuthorization` le refuse aussi).
+2. `SpinService::spin()` est idempotent : si un tirage existe, il est renvoyé
+   tel quel (double-clic, rejeu réseau).
+3. Un verrou pessimiste sur la ligne du participant sérialise deux requêtes
+   réellement simultanées ; le tirage existant est relu sous ce verrou.
 
-« Nouvelle partie » vide la session et renvoie à l’accueil. Le tirage précédent
-reste en base et ne peut être ni rejoué ni modifié : rejouer suppose une
-nouvelle inscription, donc un nouveau participant.
+`spin.participant_id` n’a pas d’index unique : l’historique antérieur peut
+contenir plusieurs tentatives pour un même participant.
 
 ## Back-office
 
@@ -109,11 +121,13 @@ Un back-office EasyAdmin est disponible sur `/admin`, réservé à `ROLE_ADMIN`
   poids, stock, activation, ordre d’affichage, couleur. Ces champs sont lus
   directement par `WeightedPrizeSelector`/`SpinService` : les modifier ici
   change le comportement du tirage sans toucher au code du jeu.
-* **Inscriptions** (`ParticipantCrudController`) — liste en lecture seule des
-  participants (nom, e-mail, société, téléphone, date d’inscription, lot
-  obtenu). Volontairement sans création/modification/suppression : un
-  participant et son tirage forment un historique que `SpinService` garantit
-  déjà unique.
+* **Inscriptions** (`ParticipantCrudController`) — outil de l’accueil :
+  recherche par nom, e-mail, société ou téléphone, puis action **Autoriser à
+  jouer** (masquée une fois que le participant a joué). Les données restent en
+  lecture seule, sans création/modification/suppression : un participant et
+  son tirage forment un historique que `SpinService` garantit déjà unique.
+* **Inscrire un visiteur** / **Ouvrir la roue** — liens vers les pages
+  publiques `/inscription` et `/jeu`.
 
 Créer le premier compte administrateur :
 

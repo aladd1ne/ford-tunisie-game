@@ -622,6 +622,12 @@ img { max-width: 100%; height: auto; }
 
 .game__actions { margin-top: 36px; }
 
+.game__hint {
+    margin: 16px auto 0;
+    max-width: 46ch;
+    color: var(--muted);
+}
+
 .game__error {
     margin: 16px auto 0;
     max-width: 46ch;
@@ -658,6 +664,24 @@ img { max-width: 100%; height: auto; }
     border-radius: 50%;
     flex: 0 0 auto;
     border: 1px solid rgba(0, 9, 91, .18);
+}
+
+.legend__name { flex: 1 1 auto; min-width: 0; }
+
+.legend__stock {
+    flex: 0 0 auto;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(6, 111, 239, .1);
+    color: var(--ford-deep);
+    font-size: .8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.legend__stock--empty {
+    background: rgba(0, 9, 91, .06);
+    color: var(--muted);
 }
 
 /* ---------------------------------------------------------------- résultat */
@@ -743,8 +767,6 @@ img { max-width: 100%; height: auto; }
     justify-content: center;
     margin-top: 18px;
 }
-
-.result__form { margin: 0; }
 
 @keyframes result-in {
     from { opacity: 0; transform: scale(.97); }

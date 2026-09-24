@@ -4,6 +4,10 @@
  * Ce script ne décide jamais du résultat : il demande au backend Symfony de
  * trancher, puis fait tourner la roue jusqu'au secteur du lot renvoyé. Aucun
  * identifiant de lot n'est envoyé par le navigateur.
+ *
+ * La roue est un écran public : elle attend qu'un participant soit autorisé
+ * à jouer depuis le back-office (interrogation régulière de playerUrl), le
+ * laisse faire tourner la roue une seule fois, puis revient en attente.
  */
 (function () {
     'use strict';
@@ -19,6 +23,8 @@
     var SPIN_DURATION_MS = 5200;
     var FULL_TURNS = 6;
     var MAX_LABEL_LENGTH = 22;
+    var PLAYER_POLL_INTERVAL_MS = 3000;
+    var RESULT_AUTO_CLOSE_MS = 20000;
 
     var EXPAND_ICON_PATH = 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5';
     var COMPRESS_ICON_PATH = 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5';
@@ -26,7 +32,7 @@
     // Restauration depuis le cache arrière/avant du navigateur (bfcache) :
     // le DOM et l'état JS figés (bouton désactivé, roue déjà tournée) sont
     // rejoués tels quels sans re-exécution du script. On force un
-    // rechargement pour retrouver l'état réel du participant côté serveur.
+    // rechargement pour retrouver le joueur réellement attendu côté serveur.
     window.addEventListener('pageshow', function (event) {
         if (event.persisted) {
             window.location.reload();
@@ -36,7 +42,9 @@
     var dataNode = document.getElementById('roue-data');
     var wheelNode = document.getElementById('roue');
     var buttonNode = document.getElementById('roue-bouton');
-    var rejouerNode = document.getElementById('roue-rejouer');
+    var terminerNode = document.getElementById('roue-terminer');
+    var playerLabelNode = document.getElementById('roue-joueur');
+    var waitingNode = document.getElementById('roue-attente');
     var errorNode = document.getElementById('roue-erreur');
     var resultNode = document.getElementById('roue-resultat');
     var confettiNode = document.getElementById('confetti-canvas');
@@ -60,9 +68,13 @@
     var prefersReducedMotion = window.matchMedia
         && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var isSpinning = false;
-    // Seul un gain fige définitivement la partie : une case « perdu » laisse
-    // la tentative suivante ouverte via le bouton « Rejouer ».
-    var isWon = Boolean(config.alreadyWon);
+    // Joueur autorisé depuis le back-office, ou null tant que la roue attend.
+    var player = config.player || null;
+    // Vrai entre la fin du tirage et la fermeture du résultat : le joueur a
+    // utilisé son unique tentative.
+    var isShowingResult = false;
+    var pollTimer = null;
+    var autoCloseTimer = null;
     var currentRotation = 0;
 
     render();
@@ -72,31 +84,102 @@
         return;
     }
 
-    if (config.hasResult) {
-        // Résultat déjà connu (gain ou perte) : la roue est figée dessus.
-        var playedIndex = config.playedPrizeUuid
-            ? indexOfPrize(config.playedPrizeUuid)
-            : randomLossIndex();
-        if (playedIndex !== -1) {
-            currentRotation = rotationForIndex(playedIndex, 0);
-            wheelNode.style.transform = 'rotate(' + currentRotation + 'deg)';
-        }
-        buttonNode.disabled = true;
-    }
-
     buttonNode.addEventListener('click', performSpin);
 
-    if (rejouerNode) {
-        rejouerNode.addEventListener('click', function () {
-            // « Rejouer » ne relance pas le tirage directement : il referme
-            // le résultat perdant pour redonner la main sur la roue, que
-            // l'on fait retourner via le bouton principal, désormais visible.
+    if (terminerNode) {
+        terminerNode.addEventListener('click', closeResult);
+    }
+
+    setPlayer(player);
+    schedulePoll();
+
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Affiche le joueur attendu (ou l'écran d'attente) et n'active la roue
+     * que pour un joueur autorisé.
+     */
+    function setPlayer(next) {
+        player = next;
+
+        if (playerLabelNode) {
+            playerLabelNode.textContent = player
+                ? 'Bonjour ' + player.firstName
+                : 'En attente du prochain joueur';
+        }
+
+        if (waitingNode) {
+            waitingNode.hidden = Boolean(player);
+        }
+
+        buttonNode.disabled = !player || isSpinning || isShowingResult;
+        buttonNode.textContent = 'Faire tourner la roue';
+    }
+
+    /**
+     * Interroge régulièrement le serveur pour savoir quel joueur l'équipe a
+     * autorisé. Pas d'interrogation pendant un tirage ou l'affichage d'un
+     * résultat : le joueur courant garde la main jusqu'au bout.
+     */
+    function schedulePoll() {
+        if (pollTimer) {
+            window.clearTimeout(pollTimer);
+        }
+
+        pollTimer = window.setTimeout(pollPlayer, PLAYER_POLL_INTERVAL_MS);
+    }
+
+    function pollPlayer() {
+        if (isSpinning || isShowingResult || !config.playerUrl) {
+            schedulePoll();
+
+            return;
+        }
+
+        fetch(config.playerUrl, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (response) {
+                return response.ok ? response.json() : null;
+            })
+            .then(function (payload) {
+                if (!payload || payload.status !== 'success' || isSpinning || isShowingResult) {
+                    return;
+                }
+
+                var next = payload.data ? payload.data.player : null;
+                var changed = (next ? next.uuid : null) !== (player ? player.uuid : null);
+
+                if (changed) {
+                    hideError();
+                    setPlayer(next);
+                }
+            })
+            .catch(function () {
+                // Réseau momentanément indisponible : nouvel essai au prochain tour.
+            })
+            .finally(schedulePoll);
+    }
+
+    /**
+     * Referme le résultat et remet la roue en attente du joueur suivant. Le
+     * joueur qui vient de jouer ne peut pas rejouer : le serveur ne le
+     * renverra plus comme joueur attendu.
+     */
+    function closeResult() {
+        if (autoCloseTimer) {
+            window.clearTimeout(autoCloseTimer);
+            autoCloseTimer = null;
+        }
+
+        if (resultNode) {
             resultNode.hidden = true;
-            rejouerNode.hidden = true;
-            buttonNode.disabled = false;
-            buttonNode.textContent = 'Faire tourner la roue';
-            buttonNode.focus();
-        });
+        }
+
+        isShowingResult = false;
+        setPlayer(null);
+        pollPlayer();
     }
 
     /* ------------------------------------------------------------------ */
@@ -247,8 +330,8 @@
 
     function performSpin() {
         // Garde-fou anti double-clic : le backend est de toute façon idempotent
-        // une fois la partie gagnée.
-        if (isSpinning || isWon) {
+        // une fois le participant passé.
+        if (isSpinning || isShowingResult || !player) {
             return;
         }
 
@@ -264,7 +347,8 @@
                 'Accept': 'application/json',
                 'X-CSRF-Token': config.csrfToken,
                 'X-Requested-With': 'XMLHttpRequest'
-            }
+            },
+            body: new URLSearchParams({ participant: player.uuid })
         })
             .then(function (response) {
                 return response.json().then(function (payload) {
@@ -277,29 +361,49 @@
                 }
 
                 var data = result.payload.data;
-                // Chaque tentative consomme son jeton : la suivante (page
-                // rechargée ou nouvelle tentative après « Rejouer ») utilise
-                // celui renvoyé ici.
+                // Chaque tirage consomme son jeton : celui du joueur suivant
+                // est renvoyé ici, sans avoir à recharger la page.
                 config.csrfToken = data.nextSpinToken || config.csrfToken;
-                isWon = Boolean(data.isWin);
+                isShowingResult = true;
 
                 return spinTo(data).then(function () {
+                    updateLegendStock(data.prizeUuid, data.prizeRemainingStock);
                     showResult(data);
                 });
             })
             .catch(function (error) {
-                buttonNode.disabled = false;
+                isShowingResult = false;
+                buttonNode.disabled = !player;
                 buttonNode.textContent = 'Faire tourner la roue';
                 showError(error && error.message
                     ? error.message
                     : 'Le tirage n’a pas pu aboutir. Merci de réessayer.');
             })
             .finally(function () {
-                // Sur un succès comme sur un échec, la tentative en cours est
-                // terminée : sans ça, toute tentative suivante (après un
-                // « Rejouer ») resterait bloquée par ce garde-fou.
+                // Sur un succès comme sur un échec, le tirage en cours est
+                // terminé : sans ça, le joueur suivant resterait bloqué par
+                // ce garde-fou.
                 isSpinning = false;
             });
+    }
+
+    // Reflète dans « Les lots en jeu » le stock restant renvoyé par le
+    // serveur, la page n'étant pas rechargée entre deux joueurs.
+    function updateLegendStock(prizeUuid, remaining) {
+        if (!prizeUuid || typeof remaining !== 'number') {
+            return;
+        }
+
+        var item = document.querySelector('.legend__item[data-prize-uuid="' + prizeUuid + '"]');
+        var stock = item ? item.querySelector('[data-legend-stock]') : null;
+        if (!stock) {
+            return;
+        }
+
+        stock.textContent = remaining <= 0
+            ? 'Épuisé'
+            : remaining + ' restant' + (remaining > 1 ? 's' : '');
+        stock.classList.toggle('legend__stock--empty', remaining <= 0);
     }
 
     function messageOf(payload) {
@@ -432,16 +536,10 @@
             card.classList.toggle('result__card--win', Boolean(result.isWin));
         }
 
-        // Le bouton principal ne resert jamais une fois un résultat affiché :
-        // « Rejouer » (le cas échéant) prend le relais dans la carte résultat.
+        // Un seul tirage par participant : la roue reste bloquée jusqu'à ce
+        // que le résultat soit refermé (« Terminer » ou fermeture auto).
         buttonNode.disabled = true;
         buttonNode.textContent = 'Faire tourner la roue';
-
-        if (rejouerNode) {
-            rejouerNode.hidden = !result.canRetry;
-            rejouerNode.disabled = !result.canRetry;
-            rejouerNode.textContent = 'Rejouer';
-        }
 
         resultNode.hidden = false;
 
@@ -450,12 +548,11 @@
             launchConfetti();
         }
 
-        var focusable = (result.canRetry && rejouerNode && !rejouerNode.hidden)
-            ? rejouerNode
-            : resultNode.querySelector('.result__form button');
-        if (focusable) {
-            focusable.focus();
+        if (terminerNode) {
+            terminerNode.focus();
         }
+
+        autoCloseTimer = window.setTimeout(closeResult, RESULT_AUTO_CLOSE_MS);
     }
 
     /* ------------------------------------------------------------------ */
