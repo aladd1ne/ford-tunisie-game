@@ -29,3 +29,14 @@ services:
     # il suffit de pointer cet alias vers une autre implémentation.
     App\Service\Game\PrizeSelectorInterface: '@App\Service\Game\WeightedPrizeSelector'
     App\Service\Game\RandomNumberGeneratorInterface: '@App\Service\Game\CryptoRandomNumberGenerator'
+
+when@test:
+    services:
+        # Remplace le générateur cryptographique par un double piloté par un
+        # état statique (App\Tests\Support\TestRandomNumberGenerator), pour
+        # que les tests fonctionnels puissent figer le pile ou face de la
+        # roue. Remplacer le service après coup via le conteneur ne
+        # suffirait pas : SpinService et WeightedPrizeSelector sont déjà
+        # câblés avec leur dépendance au moment de la requête HTTP.
+        App\Service\Game\RandomNumberGeneratorInterface: '@App\Tests\Support\TestRandomNumberGenerator'
+        App\Tests\Support\TestRandomNumberGenerator: ~

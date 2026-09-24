@@ -8,20 +8,25 @@ use App\Entity\Interface\UuidableInterface;
 use App\Entity\Trait\TimestampableEntityTrait;
 use App\Entity\Trait\UuidableEntityTrait;
 use App\Repository\ParticipantRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Participant inscrit au jeu « La Roue Ford ».
  *
- * Un participant est créé à chaque inscription : rejouer une partie
- * (« Nouvelle partie ») crée donc un nouveau participant, ce qui garantit
- * qu'un tirage déjà effectué ne peut jamais être rejoué ni modifié.
+ * L'inscription seule ne donne pas accès à la roue : à l'entrée, l'équipe
+ * vérifie l'inscription dans le back-office puis autorise le participant à
+ * jouer ($playAuthorizedAt, voir PlayAuthorization). Chaque participant ne
+ * joue qu'une seule fois, qu'il gagne ou non : SpinService n'enregistre
+ * jamais plus d'un tirage par participant.
  */
 #[ORM\Entity(repositoryClass: ParticipantRepository::class)]
 #[ORM\Table(name: 'participant')]
 #[ORM\UniqueConstraint(name: 'participant_uuid_uq', columns: ['uuid'])]
 #[ORM\Index(name: 'participant_email_idx', columns: ['email'])]
+#[ORM\Index(name: 'participant_play_authorized_at_idx', columns: ['play_authorized_at'])]
 class Participant implements UuidableInterface
 {
     use TimestampableEntityTrait;
@@ -47,8 +52,19 @@ class Participant implements UuidableInterface
     #[ORM\Column(type: Types::STRING, length: 40, nullable: true)]
     private ?string $phone = null;
 
-    #[ORM\OneToOne(mappedBy: 'participant', targetEntity: Spin::class)]
-    private ?Spin $spin = null;
+    /**
+     * Date à laquelle l'équipe a autorisé le participant à jouer depuis le
+     * back-office. Null tant qu'il ne s'est pas présenté à l'entrée.
+     */
+    #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $playAuthorizedAt = null;
+
+    /**
+     * @var Collection<int, Spin>
+     */
+    #[ORM\OneToMany(mappedBy: 'participant', targetEntity: Spin::class)]
+    #[ORM\OrderBy(['id' => 'ASC'])]
+    private Collection $spins;
 
     public function __construct(
         string $firstName,
@@ -62,6 +78,7 @@ class Participant implements UuidableInterface
         $this->company = $company;
         $this->email = $email;
         $this->phone = $phone;
+        $this->spins = new ArrayCollection();
 
         $this->generateUuid();
     }
@@ -131,14 +148,51 @@ class Participant implements UuidableInterface
         return $this;
     }
 
+    /**
+     * @return Collection<int, Spin>
+     */
+    public function getSpins(): Collection
+    {
+        return $this->spins;
+    }
+
+    /**
+     * Le tirage du participant, s'il a joué. Il y en a au plus un : SpinService
+     * refuse toute nouvelle tentative une fois qu'un tirage existe.
+     */
     public function getSpin(): ?Spin
     {
-        return $this->spin;
+        return $this->spins->isEmpty() ? null : $this->spins->first();
+    }
+
+    public function getPlayAuthorizedAt(): ?\DateTimeImmutable
+    {
+        return $this->playAuthorizedAt;
+    }
+
+    public function authorizePlay(\DateTimeImmutable $authorizedAt): static
+    {
+        $this->playAuthorizedAt = $authorizedAt;
+
+        return $this;
+    }
+
+    public function isPlayAuthorized(): bool
+    {
+        return null !== $this->playAuthorizedAt;
+    }
+
+    /**
+     * Vrai tant que le participant, autorisé à l'entrée, n'a pas encore joué.
+     */
+    public function canPlay(): bool
+    {
+        return $this->isPlayAuthorized() && !$this->hasPlayed();
     }
 
     public function hasPlayed(): bool
     {
-        return null !== $this->spin;
+        return !$this->spins->isEmpty();
     }
 
     public function getFullName(): string
@@ -148,9 +202,18 @@ class Participant implements UuidableInterface
 
     /**
      * Nom du lot remporté, pour l'affichage (back-office notamment).
+     *
+     * Parcourt tous les tirages : l'historique antérieur à la règle « un seul
+     * tirage » peut contenir des cases « perdu » suivies d'un gain.
      */
     public function getWonPrizeName(): ?string
     {
-        return $this->spin?->getPrizeName();
+        foreach ($this->spins as $spin) {
+            if ($spin->isWin()) {
+                return $spin->getPrizeName();
+            }
+        }
+
+        return null;
     }
 }

@@ -17,7 +17,6 @@
 
         <div class="shell panel-wrap">
             <div class="panel">
-                <p class="eyebrow">Étape 1 sur 2</p>
                 <h1 class="panel__title">Inscrivez-vous pour jouer</h1>
                 <p class="panel__lead">Les champs suivis d’un astérisque sont obligatoires.</p>
 
@@ -31,11 +30,11 @@
                     {{ form_errors(form) }}
 
                     <div class="form__grid">
-                        {{ include('game/_field.html.twig', { field: form.firstName, required: true }) }}
-                        {{ include('game/_field.html.twig', { field: form.lastName, required: true }) }}
-                        {{ include('game/_field.html.twig', { field: form.company, required: true, wide: true }) }}
-                        {{ include('game/_field.html.twig', { field: form.email, required: true, wide: true }) }}
-                        {{ include('game/_field.html.twig', { field: form.phone, required: false, wide: true }) }}
+                        {{ include('registration/_field.html.twig', { field: form.firstName, required: true }) }}
+                        {{ include('registration/_field.html.twig', { field: form.lastName, required: true }) }}
+                        {{ include('registration/_field.html.twig', { field: form.company, required: true, wide: true }) }}
+                        {{ include('registration/_field.html.twig', { field: form.email, required: true, wide: true }) }}
+                        {{ include('registration/_field.html.twig', { field: form.phone, required: false, wide: true }) }}
                     </div>
 
                     <div class="form__actions">

@@ -7,21 +7,25 @@ namespace App\Controller\public;
 use App\Controller\BaseController;
 use App\Dto\RegistrationDto;
 use App\Form\RegistrationType;
-use App\Service\Game\GameSession;
-use App\Service\Game\ParticipantRegistrar;
+use App\Service\Registration\ParticipantRegistrar;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
 /**
- * Inscription au jeu, préalable obligatoire à toute partie.
+ * Inscription à l'événement : formulaire puis confirmation.
+ *
+ * L'inscription ne donne pas directement accès à la roue : le participant se
+ * présente ensuite à l'accueil, où l'équipe l'autorise à jouer depuis le
+ * back-office.
  */
 class RegistrationController extends BaseController
 {
-    public function __construct(
-        private readonly GameSession $gameSession,
-    ) {
-    }
+    /**
+     * Clé du message flash portant le prénom du participant tout juste
+     * inscrit, affiché une seule fois sur la page de confirmation.
+     */
+    private const CONFIRMATION_FLASH = 'registration_confirmed';
 
     #[Route('/inscription', name: 'app_registration', methods: ['GET', 'POST'])]
     public function register(Request $request, ParticipantRegistrar $registrar): Response
@@ -34,32 +38,27 @@ class RegistrationController extends BaseController
             $registration = $form->getData();
 
             $participant = $registrar->register($registration);
-            $this->gameSession->start($participant);
+            $this->addFlash(self::CONFIRMATION_FLASH, $participant->getFirstName());
 
             return $this->redirectToRoute('app_registration_confirmation');
         }
 
-        return $this->render('game/registration.html.twig', [
+        return $this->render('registration/form.html.twig', [
             'form' => $form->createView(),
         ], new Response(null, $form->isSubmitted() ? Response::HTTP_UNPROCESSABLE_ENTITY : Response::HTTP_OK));
     }
 
     #[Route('/inscription/confirmation', name: 'app_registration_confirmation', methods: ['GET'])]
-    public function confirmation(): Response
+    public function confirmation(Request $request): Response
     {
-        $participant = $this->gameSession->getParticipant();
+        $firstNames = $request->getSession()->getFlashBag()->get(self::CONFIRMATION_FLASH);
 
-        if (null === $participant) {
+        if ([] === $firstNames) {
             return $this->redirectToRoute('app_registration');
         }
 
-        // Le tirage est déjà joué : inutile de repasser par la confirmation.
-        if ($participant->hasPlayed()) {
-            return $this->redirectToRoute('app_game');
-        }
-
-        return $this->render('game/confirmation.html.twig', [
-            'participant' => $participant,
+        return $this->render('registration/confirmation.html.twig', [
+            'firstName' => end($firstNames),
         ]);
     }
 }

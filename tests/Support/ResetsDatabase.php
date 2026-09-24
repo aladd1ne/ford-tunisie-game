@@ -49,7 +49,7 @@ trait ResetsDatabase
 
         $connection->executeStatement('SET FOREIGN_KEY_CHECKS = 0');
 
-        foreach (['spin', 'participant', 'prize'] as $table) {
+        foreach (['spin', 'participant', 'prize', '`user`'] as $table) {
             $connection->executeStatement(sprintf('TRUNCATE TABLE %s', $table));
         }
 

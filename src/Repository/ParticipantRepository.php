@@ -23,6 +23,23 @@ class ParticipantRepository extends ServiceEntityRepository
         return $this->findOneBy(['uuid' => $uuid]);
     }
 
+    /**
+     * Joueur attendu sur la roue : le dernier participant autorisé depuis le
+     * back-office qui n'a pas encore joué.
+     */
+    public function findCurrentPlayer(): ?Participant
+    {
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.spins', 's')
+            ->andWhere('p.playAuthorizedAt IS NOT NULL')
+            ->andWhere('s.id IS NULL')
+            ->orderBy('p.playAuthorizedAt', 'DESC')
+            ->addOrderBy('p.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     public function save(Participant $participant, bool $flush = true): void
     {
         $this->getEntityManager()->persist($participant);
