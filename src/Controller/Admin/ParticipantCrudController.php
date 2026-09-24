@@ -8,13 +8,16 @@ use App\Admin\Filter\PhoneFilter;
 use App\Admin\Filter\PlayedFilter;
 use App\Entity\Participant;
 use App\Exception\Game\GameException;
+use App\Service\Export\ParticipantSpreadsheetExporter;
 use App\Service\Game\PlayAuthorization;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Actions;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
 use EasyCorp\Bundle\EasyAdminBundle\Context\AdminContext;
+use EasyCorp\Bundle\EasyAdminBundle\Collection\FieldCollection;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
+use EasyCorp\Bundle\EasyAdminBundle\Factory\FilterFactory;
 use EasyCorp\Bundle\EasyAdminBundle\Field\BooleanField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\DateTimeField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\EmailField;
@@ -23,7 +26,9 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\TelephoneField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\TextFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
 /**
  * Liste des inscriptions à « La Roue Ford ».
@@ -41,10 +46,12 @@ use Symfony\Component\HttpFoundation\Response;
 class ParticipantCrudController extends AbstractCrudController
 {
     public const AUTHORIZE_PLAY_ACTION = 'authorizePlay';
+    public const EXPORT_ACTION = 'exportXlsx';
 
     public function __construct(
         private readonly PlayAuthorization $playAuthorization,
         private readonly AdminUrlGenerator $adminUrlGenerator,
+        private readonly ParticipantSpreadsheetExporter $spreadsheetExporter,
     ) {
     }
 
@@ -86,8 +93,17 @@ class ParticipantCrudController extends AbstractCrudController
             ->displayIf(static fn (Participant $participant): bool => !$participant->hasPlayed())
             ->addCssClass('btn btn-success');
 
+        // Ouvert à toute l'équipe (accueil et administrateurs) : l'URL de
+        // l'action conserve la recherche et les filtres de la liste, que
+        // l'export reprend.
+        $export = Action::new(self::EXPORT_ACTION, 'Exporter en Excel', 'fa fa-file-excel')
+            ->linkToCrudAction(self::EXPORT_ACTION)
+            ->createAsGlobalAction()
+            ->addCssClass('btn btn-success');
+
         return parent::configureActions($actions)
             ->disable(Action::NEW, Action::EDIT, Action::DELETE, Action::BATCH_DELETE)
+            ->add(Crud::PAGE_INDEX, $export)
             ->add(Crud::PAGE_INDEX, $authorizePlay)
             ->add(Crud::PAGE_DETAIL, $authorizePlay);
     }
@@ -112,6 +128,33 @@ class ParticipantCrudController extends AbstractCrudController
             ->setAction(Action::INDEX)
             ->unset('entityId')
             ->generateUrl());
+    }
+
+    /**
+     * Télécharge les inscriptions au format .xlsx, avec la même recherche,
+     * les mêmes filtres et le même tri que la liste affichée (toutes pages
+     * confondues).
+     */
+    public function exportXlsx(AdminContext $context): Response
+    {
+        $fields = FieldCollection::new($this->configureFields(Crud::PAGE_INDEX));
+        $filters = $this->container->get(FilterFactory::class)->create($context->getCrud()->getFiltersConfig(), $fields, $context->getEntity());
+
+        // Charge les tirages en même temps pour « A joué » et « Cadeau obtenu ».
+        $participants = $this->createIndexQueryBuilder($context->getSearch(), $context->getEntity(), $fields, $filters)
+            ->leftJoin('entity.spins', 'export_spin')
+            ->addSelect('export_spin')
+            ->getQuery()
+            ->getResult();
+
+        $response = new BinaryFileResponse($this->spreadsheetExporter->export($participants));
+        $response->headers->set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $response->setContentDisposition(
+            ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+            sprintf('inscriptions-roue-ford-%s.xlsx', (new \DateTimeImmutable())->format('Y-m-d-His')),
+        );
+
+        return $response->deleteFileAfterSend();
     }
 
     public function configureFields(string $pageName): iterable
