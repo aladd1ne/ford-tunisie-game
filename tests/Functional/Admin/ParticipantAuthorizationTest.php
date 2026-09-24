@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional\Admin;
 
+use App\Controller\Admin\ParticipantCrudController;
 use App\Entity\Participant;
 use App\Entity\Spin;
 use App\Entity\User;
@@ -82,9 +83,62 @@ final class ParticipantAuthorizationTest extends WebTestCase
         self::assertCount(0, $crawler->filter('a.action-authorizePlay'));
     }
 
-    private function createParticipant(string $email, string $firstName): Participant
+    public function testStaffFiltersParticipantsWhoHaveNotPlayedYet(): void
     {
-        $participant = new Participant($firstName, 'Dupont', 'Agence Nord', $email);
+        $player = $this->createParticipant('marc.dupont@exemple.fr', 'Marc');
+        $player->authorizePlay(new \DateTimeImmutable());
+        $this->entityManager->persist(new Spin($player, null, new \DateTimeImmutable()));
+        $this->entityManager->flush();
+        $waiting = $this->createParticipant('claire.martin@exemple.fr', 'Claire');
+
+        $crawler = $this->client->request('GET', '/admin?'.http_build_query([
+            'crudControllerFqcn' => ParticipantCrudController::class,
+            'crudAction' => 'index',
+            'filters' => ['played' => '0'],
+        ]));
+
+        self::assertResponseIsSuccessful();
+        self::assertSame([(string) $waiting->getId()], $crawler->filter('table tbody tr[data-id]')->each(
+            static fn ($row): string => (string) $row->attr('data-id'),
+        ));
+
+        $crawler = $this->client->request('GET', '/admin?'.http_build_query([
+            'crudControllerFqcn' => ParticipantCrudController::class,
+            'crudAction' => 'index',
+            'filters' => ['played' => '1'],
+        ]));
+
+        self::assertSame([(string) $player->getId()], $crawler->filter('table tbody tr[data-id]')->each(
+            static fn ($row): string => (string) $row->attr('data-id'),
+        ));
+    }
+
+    public function testStaffFindsAVisitorByPhoneOrEmail(): void
+    {
+        $this->createParticipant('marc.dupont@exemple.fr', 'Marc', '06 12 34 56 78');
+        $claire = $this->createParticipant('claire.martin@exemple.fr', 'Claire', '07 98 76 54 32');
+
+        foreach ([
+            ['query' => '07 98 76'],
+            ['filters' => ['phone' => '0798765432']],
+            ['filters' => ['phone' => '07.98']],
+            ['filters' => ['email' => ['comparison' => 'like', 'value' => 'claire.martin']]],
+        ] as $criteria) {
+            $crawler = $this->client->request('GET', '/admin?'.http_build_query([
+                'crudControllerFqcn' => ParticipantCrudController::class,
+                'crudAction' => 'index',
+            ] + $criteria));
+
+            self::assertResponseIsSuccessful();
+            self::assertSame([(string) $claire->getId()], $crawler->filter('table tbody tr[data-id]')->each(
+                static fn ($row): string => (string) $row->attr('data-id'),
+            ));
+        }
+    }
+
+    private function createParticipant(string $email, string $firstName, ?string $phone = null): Participant
+    {
+        $participant = new Participant($firstName, 'Dupont', 'Agence Nord', $email, $phone);
 
         $this->entityManager->persist($participant);
         $this->entityManager->flush();
