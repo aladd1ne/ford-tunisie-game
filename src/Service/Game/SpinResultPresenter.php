@@ -36,8 +36,8 @@ final class SpinResultPresenter
      *     prizeUuid: string|null,
      *     prizeName: string|null,
      *     prizeDescription: string|null,
+     *     prizeRemainingStock: int|null,
      *     isWin: bool,
-     *     canRetry: bool,
      *     badge: string,
      *     title: string,
      *     detail: string|null,
@@ -56,10 +56,10 @@ final class SpinResultPresenter
             'prizeUuid' => null !== $prize ? (string) $prize->getUuid() : null,
             'prizeName' => $prizeName,
             'prizeDescription' => $prize?->getDescription(),
+            // Stock restant après ce tirage (null : illimité ou lot supprimé),
+            // pour mettre à jour la légende sans recharger la page.
+            'prizeRemainingStock' => $prize?->getRemainingStock(),
             'isWin' => $isWin,
-            // Une tentative gagnante est toujours la dernière : SpinService
-            // n'en accepte plus après un gain.
-            'canRetry' => !$isWin,
             'badge' => $isWin ? self::WIN_BADGE : self::LOSS_BADGE,
             'title' => $isWin
                 ? sprintf('Félicitations, %s !', $participant->getFirstName())

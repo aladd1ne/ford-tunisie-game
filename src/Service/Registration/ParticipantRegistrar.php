@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Service\Game;
+namespace App\Service\Registration;
 
 use App\Dto\RegistrationDto;
 use App\Entity\Participant;
@@ -11,6 +11,10 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Transforme une inscription validée en participant persisté.
+ *
+ * Ne donne aucun accès à la roue : l'autorisation de jouer relève du jeu
+ * (voir App\Service\Game\PlayAuthorization) et se fait à l'entrée, depuis
+ * le back-office.
  */
 final class ParticipantRegistrar
 {

@@ -10,6 +10,7 @@ use App\Entity\Prize;
 use App\Entity\Spin;
 use App\Enum\PrizeType;
 use App\Exception\Game\NoPrizeAvailableException;
+use App\Exception\Game\NotAuthorizedException;
 use App\Repository\PrizeRepository;
 use App\Repository\SpinRepository;
 use App\Service\Game\PrizeSelectorInterface;
@@ -46,8 +47,8 @@ final class SpinServiceTest extends DatabaseTestCase
     }
 
     /**
-     * Un tirage gagnant est toujours le dernier : une fois gagné, spin()
-     * redevient idempotent et ne consomme plus de stock supplémentaire.
+     * Un seul tirage par participant : spin() est idempotent et ne consomme
+     * jamais de stock supplémentaire.
      */
     public function testSpinningAgainAfterAWinReturnsTheSameResultAndConsumesStockOnce(): void
     {
@@ -66,22 +67,37 @@ final class SpinServiceTest extends DatabaseTestCase
     }
 
     /**
-     * À l'inverse, une case « perdu » n'est pas définitive : chaque nouvelle
-     * tentative crée un tirage distinct tant qu'aucun gain n'a eu lieu.
+     * Une case « perdu » est tout aussi définitive : la tentative suivante
+     * renvoie le même tirage perdant, même si elle aurait été gagnante.
      */
-    public function testSpinningAgainAfterALossCreatesANewSpin(): void
+    public function testSpinningAgainAfterALossReturnsTheSameLosingSpin(): void
     {
-        $this->createPrize('Casquette Ford', 10, 5);
+        $prize = $this->createPrize('Casquette Ford', 10, 5);
         $participant = $this->createParticipant();
-        $service = $this->spinService(null, null, new FixedRandomNumberGenerator(10));
 
-        $first = $service->spin($participant);
-        $second = $service->spin($participant);
+        $first = $this->spinService(null, null, new FixedRandomNumberGenerator(10))->spin($participant);
+        $second = $this->spinService(null, null, new FixedRandomNumberGenerator(1))->spin($participant);
 
         self::assertFalse($first->isWin());
+        self::assertSame($first->getId(), $second->getId());
         self::assertFalse($second->isWin());
-        self::assertNotSame($first->getId(), $second->getId());
-        self::assertSame(2, $this->countSpins());
+        self::assertSame(1, $this->countSpins());
+        self::assertSame(5, $this->refreshStock($prize));
+    }
+
+    public function testAParticipantWhoWasNotAuthorizedCannotSpin(): void
+    {
+        $prize = $this->createPrize('Casquette Ford', 10, 5);
+        $participant = $this->createParticipant(authorized: false);
+
+        try {
+            $this->spinService()->spin($participant);
+            self::fail('Un participant non autorisé ne doit pas pouvoir jouer.');
+        } catch (NotAuthorizedException) {
+        }
+
+        self::assertSame(0, $this->countSpins());
+        self::assertSame(5, $this->refreshStock($prize));
     }
 
     public function testDatabaseAllowsSeveralSpinsForTheSameParticipant(): void
@@ -89,9 +105,9 @@ final class SpinServiceTest extends DatabaseTestCase
         $prize = $this->createPrize('Porte-clés Ford', 10);
         $participant = $this->createParticipant();
 
-        // Contournement volontaire du service : la base ne doit plus refuser
-        // un second tirage pour le même participant (index unique retiré au
-        // profit d'un index simple, voir la migration correspondante).
+        // Contournement volontaire du service : la base accepte plusieurs
+        // tirages pour un même participant (historique antérieur à la règle
+        // « un seul tirage ») ; c'est SpinService qui applique la règle.
         $this->entityManager->persist(new Spin($participant, null, new \DateTimeImmutable()));
         $this->entityManager->persist(new Spin($participant, $prize, new \DateTimeImmutable()));
         $this->entityManager->flush();
@@ -344,7 +360,7 @@ final class SpinServiceTest extends DatabaseTestCase
         );
     }
 
-    private function createParticipant(string $email = 'marc.dupont@exemple.fr'): Participant
+    private function createParticipant(string $email = 'marc.dupont@exemple.fr', bool $authorized = true): Participant
     {
         $dto = new RegistrationDto();
         $dto->firstName = 'Marc';
@@ -353,6 +369,10 @@ final class SpinServiceTest extends DatabaseTestCase
         $dto->email = $email;
 
         $participant = $dto->toParticipant();
+
+        if ($authorized) {
+            $participant->authorizePlay(new \DateTimeImmutable());
+        }
 
         $this->entityManager->persist($participant);
         $this->entityManager->flush();
