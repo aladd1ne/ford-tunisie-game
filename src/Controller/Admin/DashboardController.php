@@ -6,7 +6,9 @@ namespace App\Controller\Admin;
 
 use App\Entity\Participant;
 use App\Entity\Prize;
+use App\Entity\User;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Option\ColorScheme;
 use EasyCorp\Bundle\EasyAdminBundle\Config\MenuItem;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractDashboardController;
 use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator;
@@ -21,6 +23,10 @@ use Symfony\Component\Routing\Attribute\Route;
  * à jouer (voir ParticipantCrudController), sans jamais toucher à la logique de jeu (SpinService,
  * WeightedPrizeSelector) : celle-ci lit toujours les lots directement en
  * base.
+ *
+ * Les comptes « accueil » (ROLE_INSCRIPTION, créés depuis
+ * UserCrudController) ne voient que les inscriptions : les lots restent
+ * réservés à ROLE_ADMIN et les comptes à ROLE_SUPER_ADMIN.
  */
 class DashboardController extends AbstractDashboardController
 {
@@ -39,7 +45,10 @@ class DashboardController extends AbstractDashboardController
     {
         return Dashboard::new()
             ->setTitle('La Roue Ford')
-            ->setLocales(['fr']);
+            ->setLocales(['fr'])
+            // Thème clair par défaut pour tous ; chacun peut encore basculer
+            // en sombre depuis son menu utilisateur.
+            ->setDefaultColorScheme(ColorScheme::LIGHT);
     }
 
     public function configureMenuItems(): iterable
@@ -47,12 +56,18 @@ class DashboardController extends AbstractDashboardController
         yield MenuItem::linkToDashboard('Tableau de bord', 'fa fa-home');
         yield MenuItem::section('Jeu');
         yield MenuItem::linkToCrud('Inscriptions', 'fa fa-users', Participant::class);
-        yield MenuItem::linkToCrud('Lots', 'fa fa-gift', Prize::class);
+        yield MenuItem::linkToCrud('Lots', 'fa fa-gift', Prize::class)
+            ->setPermission('ROLE_ADMIN');
         yield MenuItem::section('Accueil des visiteurs');
         // Pages publiques, ouvertes hors du back-office.
         yield MenuItem::linkToUrl('Inscrire un visiteur', 'fa fa-user-plus', $this->generateUrl('app_registration'));
         yield MenuItem::linkToUrl('Ouvrir la roue', 'fa fa-circle-notch', $this->generateUrl('app_game'))
-            ->setLinkTarget('_blank');
+            ->setLinkTarget('_blank')
+            ->setPermission('ROLE_ADMIN');
+        yield MenuItem::section('Administration')
+            ->setPermission('ROLE_SUPER_ADMIN');
+        yield MenuItem::linkToCrud('Comptes accueil', 'fa fa-user-lock', User::class)
+            ->setPermission('ROLE_SUPER_ADMIN');
         yield MenuItem::section();
         yield MenuItem::linkToUrl('Voir le site', 'fa fa-arrow-up-right-from-square', '/');
     }
