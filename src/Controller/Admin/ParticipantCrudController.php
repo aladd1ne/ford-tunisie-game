@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Admin\Filter\PhoneFilter;
+use App\Admin\Filter\PlayedFilter;
 use App\Entity\Participant;
 use App\Exception\Game\GameException;
 use App\Service\Game\PlayAuthorization;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Actions;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
 use EasyCorp\Bundle\EasyAdminBundle\Context\AdminContext;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
 use EasyCorp\Bundle\EasyAdminBundle\Field\BooleanField;
@@ -18,6 +21,7 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\EmailField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\IdField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TelephoneField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
+use EasyCorp\Bundle\EasyAdminBundle\Filter\TextFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Router\AdminUrlGenerator;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -58,6 +62,19 @@ class ParticipantCrudController extends AbstractCrudController
             ->setSearchFields(['firstName', 'lastName', 'email', 'company', 'phone'])
             ->setPageTitle('index', 'Inscriptions à La Roue Ford')
             ->setPageTitle('detail', static fn (Participant $participant): string => $participant->getFullName());
+    }
+
+    /**
+     * Filtres ouverts à toute l'équipe (accueil et administrateurs) : « A joué
+     * : Non » liste les inscrits qui ne sont pas encore passés par la roue, et
+     * l'e-mail ou le téléphone retrouvent un visiteur précis.
+     */
+    public function configureFilters(Filters $filters): Filters
+    {
+        return $filters
+            ->add(PlayedFilter::new())
+            ->add(TextFilter::new('email', 'Adresse e-mail'))
+            ->add(PhoneFilter::new());
     }
 
     public function configureActions(Actions $actions): Actions
@@ -106,7 +123,7 @@ class ParticipantCrudController extends AbstractCrudController
         yield EmailField::new('email', 'Adresse e-mail');
         yield TelephoneField::new('phone', 'Téléphone')
             ->setRequired(false)
-            ->hideOnIndex();
+            ->formatValue(static fn (?string $value): string => $value ?? '—');
         yield BooleanField::new('played', 'A joué')
             ->renderAsSwitch(false);
         yield TextField::new('wonPrizeName', 'Cadeau obtenu')
