@@ -422,7 +422,7 @@ final class GameFlowTest extends WebTestCase
 
         self::assertCount(4, $data['segments'], 'Autant de cases perdu que de lots.');
         self::assertSame(
-            ['Casquette Ford', 'Perdu', 'Mug Ford', 'Perdu'],
+            ['Casquette Ford', 'À bientôt', 'Mug Ford', 'À bientôt'],
             array_column($data['segments'], 'name'),
         );
         self::assertSame(
@@ -431,7 +431,7 @@ final class GameFlowTest extends WebTestCase
         );
     }
 
-    public function testLosingSpinShowsTheOopsMessageWithNoPrizeAndConsumesNoStock(): void
+    public function testLosingSpinShowsTheSeeYouSoonMessageWithNoPrizeAndConsumesNoStock(): void
     {
         $this->createPrize('Casquette Ford', 10, 5);
         $participant = $this->register();

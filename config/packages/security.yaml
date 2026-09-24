@@ -11,10 +11,12 @@ security:
                 property: email
 
     # ROLE_SUPER_ADMIN (voir app:admin:create-super-admin) hérite de
-    # ROLE_ADMIN : il donne donc accès à tout /admin sans qu'il faille lister
-    # les deux rôles dans access_control.
+    # ROLE_ADMIN, qui hérite lui-même de ROLE_INSCRIPTION : ROLE_INSCRIPTION
+    # suffit donc pour entrer dans /admin, chaque écran exigeant ensuite son
+    # propre rôle (lots et comptes réservés aux administrateurs).
     role_hierarchy:
         ROLE_SUPER_ADMIN: [ROLE_ADMIN]
+        ROLE_ADMIN: [ROLE_INSCRIPTION]
 
     firewalls:
         dev:
@@ -41,7 +43,7 @@ security:
     # Note: Only the *first* access control that matches will be used
     access_control:
         - { path: ^/admin/(connexion|deconnexion), roles: PUBLIC_ACCESS }
-        - { path: ^/admin, roles: ROLE_ADMIN }
+        - { path: ^/admin, roles: ROLE_INSCRIPTION }
         # - { path: ^/profile, roles: ROLE_USER }
 
 when@test:

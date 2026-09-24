@@ -42,7 +42,7 @@ class GameController extends BaseController
      * des couleurs de marque utilisées par les lots.
      */
     private const LOSS_SEGMENT_COLOR = '#DCE3F0';
-    private const LOSS_SEGMENT_LABEL = 'Perdu';
+    private const LOSS_SEGMENT_LABEL = 'À bientôt';
 
     public function __construct(
         private readonly PlayAuthorization $playAuthorization,
